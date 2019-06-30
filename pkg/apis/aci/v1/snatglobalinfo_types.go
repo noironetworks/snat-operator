@@ -22,6 +22,7 @@ type SnatGlobalInfoStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
+	PortsInUse map[string][]PortRange
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -49,7 +50,7 @@ type SnatGlobalInfoList struct {
 type GlobalInfo struct {
 	MacAddress string    `json:"macAddress"`
 	PortRanges PortRange `json:"portRanges"`
-	NodeName   string    `json:"nodeName"`
+	SnatIp     string    `json:"snatIp"`
 	SnatIpUid  string    `json:"snatIpUid"`
 	// +kubebuilder:validation:Enum=tcp,udp,icmp
 	Protocols []string `json:"protocols"`

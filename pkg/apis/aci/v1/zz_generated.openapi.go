@@ -13,19 +13,19 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.NodeInfo":             schema_pkg_apis_aci_v1_NodeInfo(ref),
-		"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.NodeInfoSpec":         schema_pkg_apis_aci_v1_NodeInfoSpec(ref),
-		"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.NodeInfoStatus":       schema_pkg_apis_aci_v1_NodeInfoStatus(ref),
-		"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.PortRange":            schema_pkg_apis_aci_v1_PortRange(ref),
-		"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatGlobalInfo":       schema_pkg_apis_aci_v1_SnatGlobalInfo(ref),
-		"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatGlobalInfoSpec":   schema_pkg_apis_aci_v1_SnatGlobalInfoSpec(ref),
-		"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatGlobalInfoStatus": schema_pkg_apis_aci_v1_SnatGlobalInfoStatus(ref),
-		"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatLocalInfo":        schema_pkg_apis_aci_v1_SnatLocalInfo(ref),
-		"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatLocalInfoSpec":    schema_pkg_apis_aci_v1_SnatLocalInfoSpec(ref),
-		"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatLocalInfoStatus":  schema_pkg_apis_aci_v1_SnatLocalInfoStatus(ref),
-		"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatPolicy":           schema_pkg_apis_aci_v1_SnatPolicy(ref),
-		"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatPolicySpec":       schema_pkg_apis_aci_v1_SnatPolicySpec(ref),
-		"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatPolicyStatus":     schema_pkg_apis_aci_v1_SnatPolicyStatus(ref),
+		"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.NodeInfo":             schema_pkg_apis_aci_v1_NodeInfo(ref),
+		"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.NodeInfoSpec":         schema_pkg_apis_aci_v1_NodeInfoSpec(ref),
+		"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.NodeInfoStatus":       schema_pkg_apis_aci_v1_NodeInfoStatus(ref),
+		"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.PortRange":            schema_pkg_apis_aci_v1_PortRange(ref),
+		"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatGlobalInfo":       schema_pkg_apis_aci_v1_SnatGlobalInfo(ref),
+		"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatGlobalInfoSpec":   schema_pkg_apis_aci_v1_SnatGlobalInfoSpec(ref),
+		"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatGlobalInfoStatus": schema_pkg_apis_aci_v1_SnatGlobalInfoStatus(ref),
+		"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatLocalInfo":        schema_pkg_apis_aci_v1_SnatLocalInfo(ref),
+		"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatLocalInfoSpec":    schema_pkg_apis_aci_v1_SnatLocalInfoSpec(ref),
+		"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatLocalInfoStatus":  schema_pkg_apis_aci_v1_SnatLocalInfoStatus(ref),
+		"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatPolicy":           schema_pkg_apis_aci_v1_SnatPolicy(ref),
+		"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatPolicySpec":       schema_pkg_apis_aci_v1_SnatPolicySpec(ref),
+		"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatPolicyStatus":     schema_pkg_apis_aci_v1_SnatPolicyStatus(ref),
 	}
 }
 
@@ -56,19 +56,19 @@ func schema_pkg_apis_aci_v1_NodeInfo(ref common.ReferenceCallback) common.OpenAP
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.NodeInfoSpec"),
+							Ref: ref("github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.NodeInfoSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.NodeInfoStatus"),
+							Ref: ref("github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.NodeInfoStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.NodeInfoSpec", "github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.NodeInfoStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.NodeInfoSpec", "github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.NodeInfoStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -156,19 +156,19 @@ func schema_pkg_apis_aci_v1_SnatGlobalInfo(ref common.ReferenceCallback) common.
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatGlobalInfoSpec"),
+							Ref: ref("github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatGlobalInfoSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatGlobalInfoStatus"),
+							Ref: ref("github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatGlobalInfoStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatGlobalInfoSpec", "github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatGlobalInfoStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatGlobalInfoSpec", "github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatGlobalInfoStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -189,7 +189,7 @@ func schema_pkg_apis_aci_v1_SnatGlobalInfoSpec(ref common.ReferenceCallback) com
 										Items: &spec.SchemaOrArray{
 											Schema: &spec.Schema{
 												SchemaProps: spec.SchemaProps{
-													Ref: ref("github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.GlobalInfo"),
+													Ref: ref("github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.GlobalInfo"),
 												},
 											},
 										},
@@ -202,7 +202,7 @@ func schema_pkg_apis_aci_v1_SnatGlobalInfoSpec(ref common.ReferenceCallback) com
 			},
 		},
 		Dependencies: []string{
-			"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.GlobalInfo"},
+			"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.GlobalInfo"},
 	}
 }
 
@@ -245,19 +245,19 @@ func schema_pkg_apis_aci_v1_SnatLocalInfo(ref common.ReferenceCallback) common.O
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatLocalInfoSpec"),
+							Ref: ref("github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatLocalInfoSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatLocalInfoStatus"),
+							Ref: ref("github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatLocalInfoStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatLocalInfoSpec", "github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatLocalInfoStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatLocalInfoSpec", "github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatLocalInfoStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -273,7 +273,7 @@ func schema_pkg_apis_aci_v1_SnatLocalInfoSpec(ref common.ReferenceCallback) comm
 							AdditionalProperties: &spec.SchemaOrBool{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.LocalInfo"),
+										Ref: ref("github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.LocalInfo"),
 									},
 								},
 							},
@@ -283,7 +283,7 @@ func schema_pkg_apis_aci_v1_SnatLocalInfoSpec(ref common.ReferenceCallback) comm
 			},
 		},
 		Dependencies: []string{
-			"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.LocalInfo"},
+			"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.LocalInfo"},
 	}
 }
 
@@ -334,19 +334,19 @@ func schema_pkg_apis_aci_v1_SnatPolicy(ref common.ReferenceCallback) common.Open
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatPolicySpec"),
+							Ref: ref("github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatPolicySpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatPolicyStatus"),
+							Ref: ref("github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatPolicyStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatPolicySpec", "github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.SnatPolicyStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatPolicySpec", "github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.SnatPolicyStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -365,7 +365,7 @@ func schema_pkg_apis_aci_v1_SnatPolicySpec(ref common.ReferenceCallback) common.
 					},
 					"selector": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.PodSelector"),
+							Ref: ref("github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.PodSelector"),
 						},
 					},
 					"portRange": {
@@ -374,7 +374,7 @@ func schema_pkg_apis_aci_v1_SnatPolicySpec(ref common.ReferenceCallback) common.
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.PortRange"),
+										Ref: ref("github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.PortRange"),
 									},
 								},
 							},
@@ -398,7 +398,7 @@ func schema_pkg_apis_aci_v1_SnatPolicySpec(ref common.ReferenceCallback) common.
 			},
 		},
 		Dependencies: []string{
-			"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.PodSelector", "github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.PortRange"},
+			"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.PodSelector", "github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.PortRange"},
 	}
 }
 
@@ -415,7 +415,7 @@ func schema_pkg_apis_aci_v1_SnatPolicyStatus(ref common.ReferenceCallback) commo
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.PortRange"),
+										Ref: ref("github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.PortRange"),
 									},
 								},
 							},
@@ -425,6 +425,6 @@ func schema_pkg_apis_aci_v1_SnatPolicyStatus(ref common.ReferenceCallback) commo
 			},
 		},
 		Dependencies: []string{
-			"github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1.PortRange"},
+			"github.com/noironetowrks/snat-operator/pkg/apis/aci/v1.PortRange"},
 	}
 }

@@ -3,7 +3,7 @@ package snatlocalinfo
 import (
 	"context"
 
-	aciv1 "github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1"
+	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"

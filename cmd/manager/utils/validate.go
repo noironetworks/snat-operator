@@ -1,6 +1,6 @@
 package utils
 
-// aciv1 "github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1"
+// aciv1 "github.com/noironetowrks/snat-operator/pkg/apis/aci/v1"
 
 const (
 	MAX_PORT = 65535

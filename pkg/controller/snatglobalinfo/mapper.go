@@ -1,7 +1,7 @@
 package snatglobalinfo
 
 import (
-	aciv1 "github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1"
+	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -22,11 +22,13 @@ type handleLocalInfosMapper struct {
 // Request will be of this format
 // Name: "snat-localinfo-" + <locainfo CR name>
 func (h *handleLocalInfosMapper) Map(obj handler.MapObject) []reconcile.Request {
+	MapperLog.Info("Local Info Obj", "mapper handling first ###", obj.Object)
 	if obj.Object == nil {
 		return nil
 	}
 
 	localInfo, ok := obj.Object.(*aciv1.SnatLocalInfo)
+	MapperLog.Info("Local Info Obj", "mapper handling ###", localInfo)
 	if !ok {
 		return nil
 	}

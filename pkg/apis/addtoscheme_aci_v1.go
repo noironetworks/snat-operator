@@ -1,7 +1,7 @@
 package apis
 
 import (
-	v1 "github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1"
+	v1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 )
 
 func init() {

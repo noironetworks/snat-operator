@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	// nodeinfo "github.com/noironetworks/aci-containers/pkg/nodeinfo/apis/aci.nodeinfo/v1"
-	aciv1 "github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1"
+	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 	"github.com/prometheus/common/log"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -143,6 +143,25 @@ func CreateLocalInfoCR(c client.Client, localInfoSpec aciv1.SnatLocalInfoSpec, n
 	return reconcile.Result{}, nil
 }
 
+// Delete SnatLocalInfoCR Creates a SnatLocalInfo CR
+func DeleteLocalInfoCR(c client.Client, localInfoSpec aciv1.SnatLocalInfoSpec, nodeName string) (reconcile.Result, error) {
+
+	obj := &aciv1.SnatLocalInfo{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nodeName,
+			Namespace: os.Getenv("ACI_SNAT_NAMESPACE"),
+		},
+		Spec: localInfoSpec,
+	}
+	err := c.Delete(context.TODO(), obj)
+	if err != nil {
+		log.Error(err, "failed to Delete a snat locainfo cr")
+		return reconcile.Result{}, err
+	}
+	log.Info("Deleted localinfo object", "SnatLocalInfo", obj)
+	return reconcile.Result{}, nil
+}
+
 // UpdateSnatLocalInfoCR Updates a SnatLocalInfo CR
 func UpdateLocalInfoCR(c client.Client, localInfo aciv1.SnatLocalInfo) (reconcile.Result, error) {
 
@@ -157,7 +176,6 @@ func UpdateLocalInfoCR(c client.Client, localInfo aciv1.SnatLocalInfo) (reconcil
 
 // createSnatGlobalInfoCR Creates a SnatGlobalInfo CR
 func CreateSnatGlobalInfoCR(c client.Client, globalInfoSpec aciv1.SnatGlobalInfoSpec) (reconcile.Result, error) {
-
 	obj := &aciv1.SnatGlobalInfo{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      os.Getenv("ACI_SNAGLOBALINFO_NAME"),

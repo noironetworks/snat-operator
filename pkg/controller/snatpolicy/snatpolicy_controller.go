@@ -4,9 +4,9 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/gaurav-dalvi/snat-operator/cmd/manager/utils"
-	aciv1 "github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1"
 	"github.com/go-logr/logr"
+	"github.com/noironetworks/snat-operator/cmd/manager/utils"
+	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
