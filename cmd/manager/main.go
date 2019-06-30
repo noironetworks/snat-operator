@@ -10,8 +10,8 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	"github.com/gaurav-dalvi/snat-operator/pkg/apis"
-	"github.com/gaurav-dalvi/snat-operator/pkg/controller"
+	"github.com/noironetworks/snat-operator/pkg/apis"
+	"github.com/noironetworks/snat-operator/pkg/controller"
 
 	"github.com/operator-framework/operator-sdk/pkg/leader"
 	"github.com/operator-framework/operator-sdk/pkg/log/zap"

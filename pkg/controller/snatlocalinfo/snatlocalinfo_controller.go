@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gaurav-dalvi/snat-operator/cmd/manager/utils"
-	aciv1 "github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1"
+	"github.com/noironetworks/snat-operator/cmd/manager/utils"
+	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -115,6 +115,7 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 	// Query this pod using k8s client
 	foundPod := &corev1.Pod{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: podName, Namespace: request.Namespace}, foundPod)
+
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("Pod deleted", "PodName:", request.Name)
 		return reconcile.Result{}, nil
@@ -122,7 +123,6 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 	log.Info("********POD found********", "Pod name", foundPod.ObjectMeta.Name)
-
 	snatPolicy, err := utils.GetSnatPolicyCR(r.client, snatPolicyName)
 	if err != nil {
 		log.Error(err, "not matching snatpolicy")
@@ -132,10 +132,28 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 	tempLocalInfo := aciv1.LocalInfo{
 		PodName:        podName,
 		PodNamespace:   foundPod.ObjectMeta.Namespace,
-		SnatIp:         snatPolicy.Spec.SnatIp,
+		SnatIp:         snatPolicy.Spec.SnatIp[0],
 		SnatPolicyName: snatPolicy.ObjectMeta.Name,
 	}
 	localInfo, err := utils.GetLocalInfoCR(r.client, foundPod.Spec.NodeName, os.Getenv("ACI_SNAT_NAMESPACE"))
+
+	if foundPod.GetObjectMeta().GetDeletionTimestamp() != nil {
+		log.Info("********Local Info to be deleted ********", "Pod UUID", string(foundPod.ObjectMeta.Name))
+		if _, ok := localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)]; ok {
+			//tempMap := make(map[string]aciv1.LocalInfo)
+			//tempMap[string(foundPod.ObjectMeta.UID)] = tempLocalInfo
+			//tempLocalInfoSpec := aciv1.SnatLocalInfoSpec{
+			//	LocalInfos: tempMap,
+			//}
+			delete(localInfo.Spec.LocalInfos, string(foundPod.ObjectMeta.UID))
+			//if len(localInfo.Spec.LocalInfos) == 0 {
+			//	return utils.DeleteLocalInfoCR(r.client, tempLocalInfoSpec, foundPod.Spec.NodeName)
+			//} else {
+			return utils.UpdateLocalInfoCR(r.client, localInfo)
+			//}
+		}
+		return reconcile.Result{}, nil
+	}
 
 	if len(localInfo.Spec.LocalInfos) == 0 {
 		log.Info("LocalInfo CR is not present", "Creating new one", foundPod.Spec.NodeName)
@@ -154,8 +172,13 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 		log.Error(err, "localInfo error")
 	} else {
 		// LocaInfo CR is already present, Append localInfo object into Spec's map  and update Locainfo
-		localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)] = tempLocalInfo
-		return utils.UpdateLocalInfoCR(r.client, localInfo)
+		log.Info("LocalInfo is updated", "Updating the  Spec ####", localInfo.Spec.LocalInfos)
+		if foundPod.Status.Phase == "Running" {
+			localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)] = tempLocalInfo
+			return utils.UpdateLocalInfoCR(r.client, localInfo)
+		} else {
+			return reconcile.Result{}, nil
+		}
 	}
 	return reconcile.Result{}, nil
 }

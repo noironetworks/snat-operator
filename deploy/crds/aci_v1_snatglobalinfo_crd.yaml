@@ -35,7 +35,7 @@ spec:
                   properties:
                     macAddress:
                       type: string
-                    nodeName:
+                    snatIp:
                       type: string
                     portRanges:
                       properties:
@@ -63,7 +63,7 @@ spec:
                   required:
                   - macAddress
                   - portRanges
-                  - nodeName
+                  - snatIp 
                   - snatIpUid
                   - protocols
                   type: object
@@ -73,9 +73,9 @@ spec:
                 modifying this file Add custom validation using kubebuilder tags:
                 https://book.kubebuilder.io/beyond_basics/generating_crd.html'
               type: object
-          type: object
+          type: object 
         status:
-          type: object
+         type: object
   version: v1
   versions:
   - name: v1

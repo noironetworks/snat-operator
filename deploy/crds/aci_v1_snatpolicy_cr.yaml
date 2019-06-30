@@ -3,7 +3,9 @@ kind: SnatPolicy
 metadata:
   name: examplesnatpolicy
 spec:
-  snatIp: 10.20.30.40
+  snatIp: 
+    - 
+      10.20.30.40
   selector:
     namespace: foo
     # deployment: foo-deployment

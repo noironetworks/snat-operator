@@ -3,7 +3,7 @@ package utils
 import (
 	"sort"
 
-	aciv1 "github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1"
+	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )

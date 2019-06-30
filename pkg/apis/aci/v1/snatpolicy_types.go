@@ -13,7 +13,7 @@ type SnatPolicySpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
-	SnatIp    string      `json:"snatIp"`
+	SnatIp    []string    `json:"snatIp"`
 	Selector  PodSelector `json:"selector,omitempty"`
 	PortRange []PortRange `json:"portRange, omitempty"`
 	// +kubebuilder:validation:Enum=tcp,udp,icmp
@@ -26,7 +26,8 @@ type SnatPolicyStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
-	Expandedsnatports []PortRange `json:"expandedsnatports,omitempty"`
+	Expandedsnatports []PortRange            `json:"expandedsnatports,omitempty"`
+	PortsInUse        map[string][]PortRange `json:"portsinuse,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"github.com/gaurav-dalvi/snat-operator/pkg/controller/snatpolicy"
+	"github.com/noironetworks/snat-operator/pkg/controller/snatpolicy"
 )
 
 func init() {
