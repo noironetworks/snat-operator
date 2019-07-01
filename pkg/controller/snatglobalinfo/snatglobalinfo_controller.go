@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -115,7 +116,9 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
+			log.Info("Deleted LOCAL CR for Node #####", "Updating the GlobalInfo", instance.ObjectMeta.Name)
 			isSnatLocalInfoDeleted := instance.GetDeletionTimestamp() != nil
+			log.Info("Deleted LOCAL CR for Node #####", "Updating the GlobalInfo")
 			if isSnatLocalInfoDeleted {
 				//delete(globalInfo.Spec.GlobalInfos, instance.ObjectMeta.Name)
 				log.Info("Deleted LOCAL CR for Node #####", "Updating the GlobalInfo", instance.ObjectMeta.Name)
@@ -152,7 +155,7 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 					MacAddress: nodeinfo.Spec.MacAddress,
 					PortRanges: utils.GetNextPortRange(),
 					SnatIp:     snatIp,
-					SnatIpUid:  "some uid",
+					SnatIpUid:  string(uuid.NewUUID()),
 					Protocols:  []string{"tcp", "udp", "icmp"},
 				}
 

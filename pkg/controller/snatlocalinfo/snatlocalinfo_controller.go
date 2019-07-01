@@ -53,11 +53,17 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestsFromMapFunc{ToRequests: HandlePodsForPodsMapper(mgr.GetClient(), []predicate.Predicate{})})
+	err = c.Watch(&source.Kind{Type: &corev1.Pod{}},
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: HandlePodsForPodsMapper(mgr.GetClient(), []predicate.Predicate{})})
 	if err != nil {
 		return err
 	}
 
+	err = c.Watch(&source.Kind{Type: &aciv1.SnatPolicy{}},
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: HandleSnatPolicies(mgr.GetClient(), []predicate.Predicate{})})
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -84,8 +90,11 @@ func (r *ReconcileSnatLocalInfo) Reconcile(request reconcile.Request) (reconcile
 	reqLogger.Info("Reconciling SnatLocalInfo")
 
 	// If pod belongs to any resource in the snatPolicy
-	if strings.HasPrefix(request.Name, "snat-") {
+	if strings.HasPrefix(request.Name, "snat-policyforpod-") {
 		result, err := r.handlePodEvent(request)
+		return result, err
+	} else if strings.HasPrefix(request.Name, "snat-policy-") {
+		result, err := r.handleSnatPolicyEvent(request)
 		return result, err
 	} else {
 		// Fetch the SnatLocalInfo instance
@@ -128,15 +137,10 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 		log.Error(err, "not matching snatpolicy")
 		return reconcile.Result{}, err
 	}
-
-	tempLocalInfo := aciv1.LocalInfo{
-		PodName:        podName,
-		PodNamespace:   foundPod.ObjectMeta.Namespace,
-		SnatIp:         snatPolicy.Spec.SnatIp[0],
-		SnatPolicyName: snatPolicy.ObjectMeta.Name,
-	}
 	localInfo, err := utils.GetLocalInfoCR(r.client, foundPod.Spec.NodeName, os.Getenv("ACI_SNAT_NAMESPACE"))
-
+	if err != nil {
+		log.Error(err, "localInfo error")
+	}
 	if foundPod.GetObjectMeta().GetDeletionTimestamp() != nil {
 		log.Info("********Local Info to be deleted ********", "Pod UUID", string(foundPod.ObjectMeta.Name))
 		if _, ok := localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)]; ok {
@@ -154,31 +158,82 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 		}
 		return reconcile.Result{}, nil
 	}
-
-	if len(localInfo.Spec.LocalInfos) == 0 {
-		log.Info("LocalInfo CR is not present", "Creating new one", foundPod.Spec.NodeName)
+	if foundPod.Status.Phase == "Running" {
+		return r.addLocalInfo(localInfo, *foundPod, snatPolicy)
+	}
+	return reconcile.Result{}, nil
+}
+func (r *ReconcileSnatLocalInfo) handleSnatPolicyEvent(request reconcile.Request) (reconcile.Result, error) {
+	log.Info("******** Snat Policy Created/Deleted ********", "Snat Policy", request)
+	_, snatPolicyName := utils.GetPodNameFromReoncileRequest(request.Name)
+	snatPolicy, err := utils.GetSnatPolicyCR(r.client, snatPolicyName)
+	if err != nil && errors.IsNotFound(err) {
+		log.Error(err, "not matching snatpolicy")
+		return reconcile.Result{}, nil
+	} else if err != nil {
+		return reconcile.Result{}, err
+	}
+	existingPods := &corev1.PodList{}
+	err = r.client.List(context.TODO(),
+		&client.ListOptions{
+			Namespace: snatPolicy.Spec.Selector.Namespace,
+			//LabelSelector: snatPolicy.Spec.Selector.Labels,
+		},
+		existingPods)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	isSnatLocalInfoDeleted := snatPolicy.GetDeletionTimestamp() != nil
+	for _, pod := range existingPods.Items {
+		if pod.GetObjectMeta().GetDeletionTimestamp() != nil {
+			continue
+		}
+		localInfo, err := utils.GetLocalInfoCR(r.client, pod.Spec.NodeName, os.Getenv("ACI_SNAT_NAMESPACE"))
+		if err != nil && errors.IsNotFound(err) {
+			log.Error(err, "localInfo error")
+			return reconcile.Result{}, nil
+		}
+		if isSnatLocalInfoDeleted {
+			log.Info("******** Snat Policy Deleted ********", "Snat Policy", isSnatLocalInfoDeleted)
+			delete(localInfo.Spec.LocalInfos, string(pod.ObjectMeta.UID))
+			return utils.UpdateLocalInfoCR(r.client, localInfo)
+		}
+		if pod.Status.Phase == corev1.PodRunning {
+			return r.addLocalInfo(localInfo, pod, snatPolicy)
+		}
+	}
+	return reconcile.Result{}, err
+}
+func (r *ReconcileSnatLocalInfo) addLocalInfo(snatlocalinfo aciv1.SnatLocalInfo, pod corev1.Pod,
+	snatpolicy aciv1.SnatPolicy) (reconcile.Result, error) {
+	tempLocalInfo := aciv1.LocalInfo{
+		PodName:        pod.GetObjectMeta().GetName(),
+		PodNamespace:   pod.GetObjectMeta().GetNamespace(),
+		SnatIp:         snatpolicy.Spec.SnatIp[0],
+		SnatPolicyName: snatpolicy.ObjectMeta.Name,
+	}
+	if len(snatlocalinfo.Spec.LocalInfos) == 0 && snatlocalinfo.GetObjectMeta().GetName() != pod.Spec.NodeName {
+		log.Info("LocalInfo CR is not present", "Creating new one", pod.Spec.NodeName)
 		tempMap := make(map[string]aciv1.LocalInfo)
-		tempMap[string(foundPod.ObjectMeta.UID)] = tempLocalInfo
+		tempMap[string(pod.ObjectMeta.UID)] = tempLocalInfo
 		tempLocalInfoSpec := aciv1.SnatLocalInfoSpec{
 			LocalInfos: tempMap,
 		}
-		if foundPod.Status.Phase == "Running" {
-			return utils.CreateLocalInfoCR(r.client, tempLocalInfoSpec, foundPod.Spec.NodeName)
-		} else {
-			return reconcile.Result{}, nil
-		}
-
-	} else if err != nil {
-		log.Error(err, "localInfo error")
+		return utils.CreateLocalInfoCR(r.client, tempLocalInfoSpec, pod.Spec.NodeName)
 	} else {
 		// LocaInfo CR is already present, Append localInfo object into Spec's map  and update Locainfo
-		log.Info("LocalInfo is updated", "Updating the  Spec ####", localInfo.Spec.LocalInfos)
-		if foundPod.Status.Phase == "Running" {
-			localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)] = tempLocalInfo
-			return utils.UpdateLocalInfoCR(r.client, localInfo)
+		log.Info("LocalInfo is updated", "Updating the  Spec ####", snatlocalinfo.Spec.LocalInfos)
+		if len(snatlocalinfo.Spec.LocalInfos) == 0 {
+			tempMap := make(map[string]aciv1.LocalInfo)
+			tempMap[string(pod.ObjectMeta.UID)] = tempLocalInfo
+			tempLocalInfoSpec := aciv1.SnatLocalInfoSpec{
+				LocalInfos: tempMap,
+			}
+			snatlocalinfo.Spec = tempLocalInfoSpec
 		} else {
-			return reconcile.Result{}, nil
+			snatlocalinfo.Spec.LocalInfos[string(pod.ObjectMeta.UID)] = tempLocalInfo
 		}
+		return utils.UpdateLocalInfoCR(r.client, snatlocalinfo)
 	}
-	return reconcile.Result{}, nil
+
 }
