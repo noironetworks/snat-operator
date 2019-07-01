@@ -116,7 +116,7 @@ func GetSnatPolicyCR(c client.Client, policyName string) (aciv1.SnatPolicy, erro
 	err := c.Get(context.TODO(), types.NamespacedName{Name: policyName, Namespace: os.Getenv("ACI_SNAT_NAMESPACE")}, foundSnatPolicy)
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("SnatPolicy not present", "foundSnatPolicy:", policyName)
-		return aciv1.SnatPolicy{}, nil
+		return aciv1.SnatPolicy{}, err
 	} else if err != nil {
 		return aciv1.SnatPolicy{}, err
 	}

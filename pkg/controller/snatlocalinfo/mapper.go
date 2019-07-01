@@ -19,6 +19,10 @@ type handlePodsForPodsMapper struct {
 	client     client.Client
 	predicates []predicate.Predicate
 }
+type handleSnatPoliciesMapper struct {
+	client     client.Client
+	predicates []predicate.Predicate
+}
 
 func (h *handlePodsForPodsMapper) Map(obj handler.MapObject) []reconcile.Request {
 	if obj.Object == nil {
@@ -43,6 +47,31 @@ func (h *handlePodsForPodsMapper) Map(obj handler.MapObject) []reconcile.Request
 
 func HandlePodsForPodsMapper(client client.Client, predicates []predicate.Predicate) handler.Mapper {
 	return &handlePodsForPodsMapper{client, predicates}
+}
+func (h *handleSnatPoliciesMapper) Map(obj handler.MapObject) []reconcile.Request {
+	MapperLog.Info("Snat Polcies Info Obj", "mapper handling first ###", obj.Object)
+	if obj.Object == nil {
+		return nil
+	}
+
+	snatpolicy, ok := obj.Object.(*aciv1.SnatPolicy)
+	MapperLog.Info("Local Info Obj", "mapper handling ###", snatpolicy)
+	if !ok {
+		return nil
+	}
+
+	var requests []reconcile.Request
+	requests = append(requests, reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Namespace: snatpolicy.Spec.Selector.Namespace,
+			Name:      "snat-policy-" + snatpolicy.ObjectMeta.Name + "-" + "created",
+		},
+	})
+	return requests
+}
+
+func HandleSnatPolicies(client client.Client, predicates []predicate.Predicate) handler.Mapper {
+	return &handleSnatPoliciesMapper{client, predicates}
 }
 
 /*
@@ -71,7 +100,7 @@ Loop:
 				requests = append(requests, reconcile.Request{
 					NamespacedName: types.NamespacedName{
 						Namespace: pod.ObjectMeta.Namespace,
-						Name:      "snat-policy-" + item.ObjectMeta.Name + "-" + pod.ObjectMeta.Name,
+						Name:      "snat-policyforpod-" + item.ObjectMeta.Name + "-" + pod.ObjectMeta.Name,
 					},
 				})
 				break Loop
