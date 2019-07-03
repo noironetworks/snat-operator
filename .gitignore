@@ -1,0 +1,10 @@
+/venv
+/build
+/dist
+/dist-static
+*.egg-info
+.cache
+*~
+*.swp
+coverage.out
+cscope.*
