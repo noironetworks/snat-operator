@@ -57,7 +57,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -137,8 +136,10 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 	}
 	// Create  get the local ip -> Snat Policy refrences
 	localips := make(map[string][]string)
+	var snatip string
 	for _, v := range instance.Spec.LocalInfos {
 		localips[v.SnatIp] = append(localips[v.SnatIp], v.SnatPolicyName)
+		snatip = v.SnatIp
 	}
 	nodeinfo, _ := utils.GetNodeInfoCRObject(r.client, instance.ObjectMeta.Name)
 	// Get SnatGlobalInfo instance
@@ -148,12 +149,16 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create SnatGlobalInfo Object
+			_, portrange, _, err := utils.GetIPPortRangeForPod(instance.ObjectMeta.Name, localips[snatip][0], r.client)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
 			globalInfos := []aciv1.GlobalInfo{}
 			// get Mac Addres
 			for snatIp, _ := range localips {
 				temp := aciv1.GlobalInfo{
 					MacAddress: nodeinfo.Spec.MacAddress,
-					PortRanges: utils.GetNextPortRange(),
+					PortRanges: portrange,
 					SnatIp:     snatIp,
 					SnatIpUid:  string(uuid.NewUUID()),
 					Protocols:  []string{"tcp", "udp", "icmp"},
@@ -197,11 +202,17 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 				}
 			}
 			if found == false {
+				_, portrange, _, err := utils.GetIPPortRangeForPod(instance.ObjectMeta.Name, localips[snatIp][0], r.client)
+				if err != nil {
+					log.Error(err, "Update Global GR for getting PortsRage  FAILED#####", portrange)
+					return reconcile.Result{}, err
+				}
+				log.Info("Update Global GR for getting PortsRage  #####", "Portrage:", portrange)
 				temp := aciv1.GlobalInfo{
 					MacAddress: nodeinfo.Spec.MacAddress,
-					PortRanges: utils.GetNextPortRange(),
+					PortRanges: portrange,
 					SnatIp:     snatIp,
-					SnatIpUid:  "some uid",
+					SnatIpUid:  string(uuid.NewUUID()),
 					Protocols:  []string{"tcp", "udp", "icmp"},
 				}
 				globalInfos = append(globalInfos, temp)

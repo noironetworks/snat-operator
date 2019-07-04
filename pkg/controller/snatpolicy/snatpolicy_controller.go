@@ -2,7 +2,6 @@ package snatpolicy
 
 import (
 	"context"
-	"reflect"
 
 	"github.com/go-logr/logr"
 	"github.com/noironetworks/snat-operator/cmd/manager/utils"
@@ -123,19 +122,19 @@ func (r *ReconcileSnatPolicy) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 	}
-
-	// Update the status if necessary
-	expandedsnatports := utils.ExpandPortRanges(instance.Spec.PortRange, PORTPERNODES)
-	if !reflect.DeepEqual(instance.Status.Expandedsnatports, expandedsnatports) {
-		instance.Status.Expandedsnatports = expandedsnatports
-		err := r.client.Status().Update(context.TODO(), instance)
-		if err != nil {
-			reqLogger.Error(err, "failed to update the SnatPolicy")
-			return reconcile.Result{}, err
+	/*
+		// Update the status if necessary
+		expandedsnatports := utils.ExpandPortRanges(instance.Spec.PortRange, PORTPERNODES)
+		if !reflect.DeepEqual(instance.Status.Expandedsnatports, expandedsnatports) {
+			instance.Status.Expandedsnatports = expandedsnatports
+			err := r.client.Status().Update(context.TODO(), instance)
+			if err != nil {
+				reqLogger.Error(err, "failed to update the SnatPolicy")
+				return reconcile.Result{}, err
+			}
+			reqLogger.Info("Updated snatpolicy status", "Status:", instance.Status)
 		}
-		reqLogger.Info("Updated snatpolicy status", "Status:", instance.Status)
-	}
-
+	*/
 	// In case of update (deletion of subnets which are currently used by snatip)
 	if err := r.finalizeSnatPolicy(reqLogger, instance); err != nil {
 		return reconcile.Result{}, err

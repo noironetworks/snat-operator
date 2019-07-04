@@ -24,10 +24,10 @@ type SnatPolicySpec struct {
 // +k8s:openapi-gen=true
 type SnatPolicyStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
+	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file7
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
-	Expandedsnatports []PortRange            `json:"expandedsnatports,omitempty"`
-	PortsInUse        map[string][]PortRange `json:"portsinuse,omitempty"`
+	//Expandedsnatports  []PortRange                `json:"expandedsnatports,omitempty"`
+	SnatPortsAllocated map[string][]NodePortRange `json:"snat-allocation,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -61,6 +61,10 @@ type PodSelector struct {
 type Label struct {
 	Key   string `json:"key,omitempty"`
 	Value string `json:"value,omitempty"`
+}
+type NodePortRange struct {
+	NodeName  string    `json:"nodename,omitempty"`
+	PortRange PortRange `json:"portrange,omitempty"`
 }
 
 func init() {

@@ -80,6 +80,7 @@ func sortIps(ips []string) []string {
 	return outputIps
 }
 
+
 // // This function will be repaced depeding upon design choice.
 // func GetReservedPortRanges() []snattypes.PortRange {
 // 	reservedPorts := []snattypes.PortRange{
