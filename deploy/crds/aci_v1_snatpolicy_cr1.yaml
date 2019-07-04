@@ -1,13 +1,13 @@
 apiVersion: aci.snat/v1
 kind: SnatPolicy
 metadata:
-  name: examplesnatpolicy
+  name: examplesnatpolicy1
 spec:
   snatIp: 
     - 
-      10.20.30.40/30
+      10.20.30.30/30
   selector:
-    namespace: foo
+    namespace: foo1
     # deployment: foo-deployment
     # labels:
     #   -

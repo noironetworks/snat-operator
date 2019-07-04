@@ -2,7 +2,6 @@ package snatpolicy
 
 import (
 	"context"
-	"reflect"
 
 	"github.com/go-logr/logr"
 	"github.com/noironetworks/snat-operator/cmd/manager/utils"
@@ -19,14 +18,8 @@ import (
 )
 
 const snatPolicyFinalizer = "finalizer.snatpolicy.aci.snat"
-const PORTPERNODES = 1000
 
 var log = logf.Log.WithName("controller_snatpolicy")
-
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
 
 // Add creates a new SnatPolicy Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -69,11 +62,6 @@ type ReconcileSnatPolicy struct {
 
 // Reconcile reads that state of the cluster for a SnatPolicy object and makes changes based on the state read
 // and what is in the SnatPolicy.Spec
-// TODO(user): Modify this Reconcile function to implement your Controller logic.  This example creates
-// a Pod as an example
-// Note:
-// The Controller will requeue the Request to be processed again if the returned error is non-nil or
-// Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileSnatPolicy) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling SnatPolicy")
@@ -114,26 +102,24 @@ func (r *ReconcileSnatPolicy) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, nil
 	}
 
-	// Validation of SnatPolicy struct
-	// Weite SnatPolicy Spec Validation here
+	validator := utils.Validator{}
+	validator.ValidateSnatIP(instance, r.client)
+	if !validator.Validated {
+		reqLogger.Error(err, "SnatIP Policy is not valid, hence deleting it : "+validator.ErrorMessage)
+		// Deleting snatip instance
+		err = r.client.Delete(context.TODO(), instance)
+		if err != nil {
+			reqLogger.Error(err, "failed to delete a Snatpolicy item : "+instance.ObjectMeta.Name)
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, err
+	}
 
 	// Add finalizer for this CR
 	if !utils.Contains(instance.GetFinalizers(), snatPolicyFinalizer) {
 		if err := r.addFinalizer(instance); err != nil {
 			return reconcile.Result{}, err
 		}
-	}
-
-	// Update the status if necessary
-	expandedsnatports := utils.ExpandPortRanges(instance.Spec.PortRange, PORTPERNODES)
-	if !reflect.DeepEqual(instance.Status.Expandedsnatports, expandedsnatports) {
-		instance.Status.Expandedsnatports = expandedsnatports
-		err := r.client.Status().Update(context.TODO(), instance)
-		if err != nil {
-			reqLogger.Error(err, "failed to update the SnatPolicy")
-			return reconcile.Result{}, err
-		}
-		reqLogger.Info("Updated snatpolicy status", "Status:", instance.Status)
 	}
 
 	// In case of update (deletion of subnets which are currently used by snatip)

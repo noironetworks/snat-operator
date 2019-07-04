@@ -6,10 +6,9 @@ import (
 	"strings"
 
 	// nodeinfo "github.com/noironetworks/aci-containers/pkg/nodeinfo/apis/aci.nodeinfo/v1"
+
 	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 	"github.com/prometheus/common/log"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -17,37 +16,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// Check if given pod belongs to given deployment or not
-func CheckIfPodForDeployment(c client.Client, pod corev1.Pod, deploymentName, deploymentNamespace string) (bool, error) {
-
-	// Get the deployment
-	deployment := &appsv1.Deployment{}
-	err := c.Get(context.TODO(), types.NamespacedName{Name: deploymentName, Namespace: deploymentNamespace}, deployment)
-	if err != nil {
-		UtilLog.Error(err, "Deployment deleted, name: "+deploymentName)
-		return false, err
-	}
-
-	// Check if  any of the deployment lable is present in pod's label or not
-	UtilLog.Info("Deployment labels", "Label", deployment.ObjectMeta.Labels)
-	UtilLog.Info("Pod labels", "Label", pod.ObjectMeta.Labels)
-	for dKey, dVal := range deployment.ObjectMeta.Labels {
-		for pKey, pVal := range pod.ObjectMeta.Labels {
-			if dKey == pKey && dVal == pVal {
-				// Match found.
-				UtilLog.Info("Labels matched", "Deployment label", dKey+"="+dVal, "PodLabel", pKey+"="+pVal)
-				return true, nil
-			}
-		}
-	}
-
-	return false, nil
-}
-
-// Check if given pod belongs to given service or not
-func CheckIfPodForService(corev1.Pod, corev1.Service) bool {
-	return true
-}
+const (
+	MAX_PORT = 65000
+	MIN_PORT = 5000
+)
+const PORTPERNODES = 3000
 
 // Given a reconcile request name, it extracts out pod name by omiiting snat-policy- from it
 // eg: snat-policy-foo-podname -> podname, foo
@@ -201,5 +174,75 @@ func UpdateGlobalInfoCR(c client.Client, globalInfo aciv1.SnatGlobalInfo) (recon
 		return reconcile.Result{}, err
 	}
 	log.Info("Updated globalInfo object", "SnatGlobalinfo", globalInfo)
+	return reconcile.Result{}, nil
+}
+
+// Get IP and port for pod for which notification has come to reconcile loop
+func GetIPPortRangeForPod(NodeName string, snatPolicyName string, c client.Client) (string, aciv1.PortRange, bool, error) {
+	log.Info("SnatPolicy Info", "Snatpolicy Name", snatPolicyName)
+	foundSnatPolicy, err := GetSnatPolicyCR(c, snatPolicyName)
+	if err != nil {
+		log.Error(err, "not matching snatpolicy", snatPolicyName)
+		return "", aciv1.PortRange{}, false, err
+	}
+	snatPortsAllocated := foundSnatPolicy.Status.SnatPortsAllocated
+	snatIps := ExpandCIDRs(foundSnatPolicy.Spec.SnatIp)
+	var portRange aciv1.PortRange
+	portRange.Start = MIN_PORT
+	portRange.End = MAX_PORT
+	var currPortRange []aciv1.PortRange
+	currPortRange = append(currPortRange, portRange)
+	expandedsnatports := ExpandPortRanges(currPortRange, PORTPERNODES)
+	if len(snatPortsAllocated) == 0 {
+		return snatIps[0], expandedsnatports[0], false, nil
+	}
+	for _, v := range snatIps {
+		if _, ok := snatPortsAllocated[v]; ok {
+			//  Check ports for this IP exhaused, then check for next IP
+			if len(snatPortsAllocated[v]) < len(expandedsnatports) {
+				for _, val := range snatPortsAllocated[v] {
+					if val.NodeName == NodeName {
+						return v, val.PortRange, true, nil
+					}
+				}
+				m := map[int]int{}
+				for _, Val1 := range snatPortsAllocated[v] {
+					m[Val1.PortRange.Start] = Val1.PortRange.End
+				}
+				for i, Val2 := range expandedsnatports {
+					if _, ok := m[Val2.Start]; !ok {
+						var nodePortRange aciv1.NodePortRange
+						nodePortRange.NodeName = NodeName
+						nodePortRange.PortRange = expandedsnatports[i]
+						snatPortsAllocated[v] = append(snatPortsAllocated[v], nodePortRange)
+						return v, expandedsnatports[i], false, nil
+					}
+				}
+			}
+		}
+	}
+	return "", aciv1.PortRange{}, false, nil
+}
+func UpdateSnatPolicyStatus(NodeName string, snatPolicyName string, snatIp string, c client.Client) (reconcile.Result, error) {
+	foundSnatPolicy, err := GetSnatPolicyCR(c, snatPolicyName)
+	if err != nil {
+		log.Error(err, "not matching snatpolicy", snatPolicyName)
+		return reconcile.Result{}, nil
+	}
+	if _, ok := foundSnatPolicy.Status.SnatPortsAllocated[snatIp]; ok {
+		nodePortRange := foundSnatPolicy.Status.SnatPortsAllocated[snatIp]
+		for i, val := range nodePortRange {
+			if val.NodeName == NodeName {
+				nodePortRange[i] = nodePortRange[len(nodePortRange)-1]
+				nodePortRange = nodePortRange[:len(nodePortRange)-1]
+				break
+			}
+		}
+		foundSnatPolicy.Status.SnatPortsAllocated[snatIp] = nodePortRange
+		err = c.Status().Update(context.TODO(), &foundSnatPolicy)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	}
 	return reconcile.Result{}, nil
 }

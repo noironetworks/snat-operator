@@ -54,12 +54,3 @@ func Remove(list []string, s string) []string {
 	}
 	return list
 }
-
-// This function will carve out new port range to be used on that node.
-// Bin packing kid of logic is needed here.
-func GetNextPortRange() aciv1.PortRange {
-	return aciv1.PortRange{
-		Start: 5000,
-		End:   5999,
-	}
-}
