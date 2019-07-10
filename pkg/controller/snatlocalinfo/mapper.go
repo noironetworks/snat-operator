@@ -3,8 +3,12 @@ package snatlocalinfo
 import (
 	"context"
 
+	"github.com/noironetworks/snat-operator/cmd/manager/utils"
+
 	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -20,6 +24,14 @@ type handlePodsForPodsMapper struct {
 	predicates []predicate.Predicate
 }
 type handleSnatPoliciesMapper struct {
+	client     client.Client
+	predicates []predicate.Predicate
+}
+type handleDeployment struct {
+	client     client.Client
+	predicates []predicate.Predicate
+}
+type handleNamespace struct {
 	client     client.Client
 	predicates []predicate.Predicate
 }
@@ -63,8 +75,7 @@ func (h *handleSnatPoliciesMapper) Map(obj handler.MapObject) []reconcile.Reques
 	var requests []reconcile.Request
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Namespace: snatpolicy.Spec.Selector.Namespace,
-			Name:      "snat-policy-" + snatpolicy.ObjectMeta.Name + "-" + "created",
+			Name: "snat-policy$" + snatpolicy.ObjectMeta.Name + "$" + "created" + "$" + "new",
 		},
 	})
 	return requests
@@ -93,19 +104,122 @@ Loop:
 			// Now need to match pod with correct snatPolicy item
 			// According to priority:
 			// 1: Labels of pod should match exactly with labels of podSelector
-			// 2: Deployment of pod should match exactly with deployment of podSelector
-			// 3: Namespace of pod should match exactly with namespace of podSelector
+			// 2: Deployment labels should match exactly with Policy labels
+			// 3: Namespace labels should match exactly with Policy labels
 			// right now namespace approach is implemented.
-			if item.Spec.Selector.Namespace == pod.ObjectMeta.Namespace {
+
+			if utils.MatchLabels(item.Spec.Selector.Labels, pod.ObjectMeta.Labels) {
+				MapperLog.Info("Snat Polcies Info Obj", "Matches Pod Lables###", pod.ObjectMeta.Labels)
 				requests = append(requests, reconcile.Request{
 					NamespacedName: types.NamespacedName{
 						Namespace: pod.ObjectMeta.Namespace,
-						Name:      "snat-policyforpod-" + item.ObjectMeta.Name + "-" + pod.ObjectMeta.Name,
+						Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "pod",
 					},
 				})
 				break Loop
 			}
+
+			replicaset := &appsv1.ReplicaSet{}
+			for _, rs := range pod.OwnerReferences {
+				if rs.Kind == "ReplicaSet" && rs.Name != "" {
+					err := c.Get(context.TODO(), types.NamespacedName{Name: rs.Name}, replicaset)
+					if err != nil {
+						//MapperLog.Error(err, "Replication get  Failed")
+					}
+					break
+				}
+			}
+			deployment := &appsv1.Deployment{}
+			var depname string
+			for _, dep := range replicaset.OwnerReferences {
+				if dep.Kind == "Deployment" && dep.Name != "" {
+					depname = dep.Name
+					break
+				}
+			}
+			// Need to revisit this code how to set proper NameSpace here
+			err := c.Get(context.TODO(), types.NamespacedName{Namespace: "default", Name: depname}, deployment)
+			if err == nil {
+				MapperLog.Info("Snat Polcies Info Obj", "Labels for  Deployment OBJ ###", deployment.ObjectMeta.Labels)
+				if utils.MatchLabels(item.Spec.Selector.Labels, deployment.ObjectMeta.Labels) {
+					requests = append(requests, reconcile.Request{
+						NamespacedName: types.NamespacedName{
+							Namespace: pod.ObjectMeta.Namespace,
+							Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "deployment",
+						},
+					})
+					break Loop
+				}
+			} else if err != nil && errors.IsNotFound(err) {
+				MapperLog.Info("Obj", "No deployment found with: ", depname)
+			} else if err != nil {
+				//MapperLog.Error(err, " deployment get error")
+			}
+
+			MapperLog.Info("Snat Polcies Info Obj", "mapper handling NameSpace OBJ ###", pod)
+			namespace := &corev1.Namespace{}
+			err = c.Get(context.TODO(), types.NamespacedName{Name: pod.ObjectMeta.Namespace}, namespace)
+			if err == nil {
+				if utils.MatchLabels(item.Spec.Selector.Labels, namespace.ObjectMeta.Labels) {
+					MapperLog.Info("Snat Polcies Matching", "Labels for  NameSpace OBJ ###", namespace.ObjectMeta.Labels)
+					requests = append(requests, reconcile.Request{
+						NamespacedName: types.NamespacedName{
+							Namespace: pod.ObjectMeta.Namespace,
+							Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "namepsace",
+						},
+					})
+					break Loop
+				}
+			} else if err != nil && errors.IsNotFound(err) {
+				MapperLog.Info("Obj", "No namespace found with: ", namespace)
+			} else if err != nil {
+				//MapperLog.Error(err, "namespace get error")
+			}
 		}
 	}
+	return requests
+}
+
+func HandleDeploymentForDeploymentMapper(client client.Client, predicates []predicate.Predicate) handler.Mapper {
+	return &handleDeployment{client, predicates}
+}
+func HandleNameSpaceForNameSpaceMapper(client client.Client, predicates []predicate.Predicate) handler.Mapper {
+	return &handleNamespace{client, predicates}
+}
+
+func (h *handleDeployment) Map(obj handler.MapObject) []reconcile.Request {
+	MapperLog.Info("Deployment  Info Obj", "mapper handling first ###", obj.Object)
+	var requests []reconcile.Request
+	if obj.Object == nil {
+		return nil
+	}
+	deployment, ok := obj.Object.(*appsv1.Deployment)
+	if !ok {
+		return nil
+	}
+	requests = append(requests, reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name: "snat-deployment$" + deployment.ObjectMeta.Namespace + "$" + deployment.ObjectMeta.Name + "$" + "deployment",
+		},
+	})
+	return requests
+}
+
+func (h *handleNamespace) Map(obj handler.MapObject) []reconcile.Request {
+	var requests []reconcile.Request
+	MapperLog.Info("NameSpace Info Obj", "mapper handling first ###", obj.Object)
+	if obj.Object == nil {
+		return nil
+	}
+
+	namespace, ok := obj.Object.(*corev1.Namespace)
+	if !ok {
+		return nil
+	}
+	requests = append(requests, reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name: "snat-namespace$" + "labelchange" + "$" + namespace.ObjectMeta.Name + "$" + "namespace",
+		},
+	})
 	return requests
 }

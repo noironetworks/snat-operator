@@ -71,8 +71,8 @@ type ReconcileSnatGlobalInfo struct {
 func (r *ReconcileSnatGlobalInfo) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling SnatGlobalInfo")
-	if strings.Contains(request.Name, "snat-localinfo-") {
-		localInfoName := request.Name[len("snat-localinfo-"):]
+	if strings.Contains(request.Name, "snat-localinfo$") {
+		localInfoName := request.Name[len("snat-localinfo$"):]
 		result, err := r.handleLocalinfoEvent(localInfoName)
 		return result, err
 	} else {
@@ -105,12 +105,10 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			log.Info("Deleted LOCAL CR for Node #####", "Updating the GlobalInfo", instance.ObjectMeta.Name)
 			isSnatLocalInfoDeleted := instance.GetDeletionTimestamp() != nil
-			log.Info("Deleted LOCAL CR for Node #####", "Updating the GlobalInfo")
 			if isSnatLocalInfoDeleted {
 				//delete(globalInfo.Spec.GlobalInfos, instance.ObjectMeta.Name)
-				log.Info("Deleted LOCAL CR for Node #####", "Updating the GlobalInfo", instance.ObjectMeta.Name)
+				log.Info("Deleted LOCAL CR for Node: ", "Updating the GlobalInfo: ", instance.ObjectMeta.Name)
 				//return utils.UpdateGlobalInfoCR(r.client, *globalInfo)
 			}
 			return reconcile.Result{}, nil
@@ -131,7 +129,11 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 		localips[v.SnatIp] = append(localips[v.SnatIp], v.SnatPolicyName)
 		snatip = v.SnatIp
 	}
-	nodeinfo, _ := utils.GetNodeInfoCRObject(r.client, instance.ObjectMeta.Name)
+	nodeinfo, err := utils.GetNodeInfoCRObject(r.client, instance.ObjectMeta.Name)
+	if err != nil {
+		log.Error(err, "Failed to Get NodeInfo ")
+		return reconcile.Result{}, err
+	}
 	// Get SnatGlobalInfo instance
 	globalInfo := &aciv1.SnatGlobalInfo{}
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: os.Getenv("ACI_SNAGLOBALINFO_NAME"),
@@ -144,11 +146,13 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 				return reconcile.Result{}, err
 			}
 			globalInfos := []aciv1.GlobalInfo{}
+			portlist := []aciv1.PortRange{}
+			portlist = append(portlist, portrange)
 			// get Mac Addres
 			for snatIp, _ := range localips {
 				temp := aciv1.GlobalInfo{
-					MacAddress: nodeinfo.Spec.MacAddress,
-					PortRanges: portrange,
+					MacAddress: nodeinfo.Spec.Macaddress,
+					PortRanges: portlist,
 					SnatIp:     snatIp,
 					SnatIpUid:  string(uuid.NewUUID()),
 					Protocols:  []string{"tcp", "udp", "icmp"},
@@ -194,13 +198,15 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 			if found == false {
 				_, portrange, _, err := utils.GetIPPortRangeForPod(instance.ObjectMeta.Name, localips[snatIp][0], r.client)
 				if err != nil {
-					log.Error(err, "Update Global GR for getting PortsRage  FAILED#####", portrange)
+					log.Error(err, "Update Global CR for getting PortsRage  FAILED#####", portrange)
 					return reconcile.Result{}, err
 				}
-				log.Info("Update Global GR for getting PortsRage  #####", "Portrage:", portrange)
+				log.Info("Update Global CR for getting PortsRage  #####", "Portrage:", portrange)
+				portlist := []aciv1.PortRange{}
+				portlist = append(portlist, portrange)
 				temp := aciv1.GlobalInfo{
-					MacAddress: nodeinfo.Spec.MacAddress,
-					PortRanges: portrange,
+					MacAddress: nodeinfo.Spec.Macaddress,
+					PortRanges: portlist,
 					SnatIp:     snatIp,
 					SnatIpUid:  string(uuid.NewUUID()),
 					Protocols:  []string{"tcp", "udp", "icmp"},
@@ -211,7 +217,17 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 		}
 		if update {
 			log.Info("Update for LOCAL CR is Received", "calling Global CR Update", globalInfo)
-			globalInfo.Spec.GlobalInfos[instance.ObjectMeta.Name] = globalInfos
+			if len(globalInfos) == 0 {
+				delete(globalInfo.Spec.GlobalInfos, instance.ObjectMeta.Name)
+			} else {
+				if globalInfo.Spec.GlobalInfos == nil {
+					tempMap := make(map[string][]aciv1.GlobalInfo)
+					tempMap[instance.ObjectMeta.Name] = globalInfos
+					globalInfo.Spec.GlobalInfos = tempMap
+				} else {
+					globalInfo.Spec.GlobalInfos[instance.ObjectMeta.Name] = globalInfos
+				}
+			}
 			return utils.UpdateGlobalInfoCR(r.client, *globalInfo)
 		}
 	}

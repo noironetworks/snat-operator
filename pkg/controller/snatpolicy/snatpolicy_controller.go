@@ -140,14 +140,13 @@ func (r *ReconcileSnatPolicy) addFinalizer(m *aciv1.SnatPolicy) error {
 	// Update CR
 	err := r.client.Update(context.TODO(), m)
 	if err != nil {
-		log.Error(err, "Failed to update SnatSubnet with finalizer")
+		log.Error(err, "Failed to update SnatPolicy with finalizer")
 		return err
 	}
 	return nil
 }
 
 // Cleanup steps to be done when snatPolicy resource is getting deleted.
-
 func (r *ReconcileSnatPolicy) finalizeSnatPolicy(reqLogger logr.Logger, m *aciv1.SnatPolicy) error {
 	return nil
 }
