@@ -4,7 +4,9 @@ import (
 	"context"
 
 	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -63,8 +65,7 @@ func (h *handleSnatPoliciesMapper) Map(obj handler.MapObject) []reconcile.Reques
 	var requests []reconcile.Request
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Namespace: snatpolicy.Spec.Selector.Namespace,
-			Name:      "snat-policy-" + snatpolicy.ObjectMeta.Name + "-" + "created",
+			Name: "snat-policy-" + snatpolicy.ObjectMeta.Name + "-" + "created" + "-" + "new",
 		},
 	})
 	return requests
@@ -96,16 +97,74 @@ Loop:
 			// 2: Deployment of pod should match exactly with deployment of podSelector
 			// 3: Namespace of pod should match exactly with namespace of podSelector
 			// right now namespace approach is implemented.
-			if item.Spec.Selector.Namespace == pod.ObjectMeta.Namespace {
-				requests = append(requests, reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Namespace: pod.ObjectMeta.Namespace,
-						Name:      "snat-policyforpod-" + item.ObjectMeta.Name + "-" + pod.ObjectMeta.Name,
-					},
-				})
-				break Loop
+			MapperLog.Info("Snat Polcies Info Obj", "mapper handling POD OBJ ###", pod)
+			for _, label := range item.Spec.Selector.Labels {
+				if _, ok := pod.ObjectMeta.Labels[label.Key]; ok {
+					if label.Value == pod.ObjectMeta.Labels[label.Key] {
+						requests = append(requests, reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Namespace: pod.ObjectMeta.Namespace,
+								Name:      "snat-policyforpod-" + item.ObjectMeta.Name + "-" + pod.ObjectMeta.Name + "-" + "pod",
+							},
+						})
+						break Loop
+					}
+				}
+			}
+			MapperLog.Info("Snat Polcies Info Obj", "mapper handling Deployment OBJ ###", pod)
+			deployment := &appsv1.Deployment{}
+			err := c.List(context.TODO(),
+				&client.ListOptions{
+					LabelSelector: labels.SelectorFromSet(pod.ObjectMeta.Labels),
+				},
+				deployment)
+			if err == nil {
+				MapperLog.Info("Snat Polcies Info Obj", "Labels for  Deployment OBJ ###", deployment.ObjectMeta.Labels)
+				for _, label := range item.Spec.Selector.Labels {
+					if _, ok := deployment.ObjectMeta.Labels[label.Key]; ok {
+						if label.Value == deployment.ObjectMeta.Labels[label.Key] {
+							requests = append(requests, reconcile.Request{
+								NamespacedName: types.NamespacedName{
+									Namespace: pod.ObjectMeta.Namespace,
+									Name:      "snat-policyforpod-" + item.ObjectMeta.Name + "-" + pod.ObjectMeta.Name + "_" + "deployment",
+								},
+							})
+							break Loop
+						}
+					}
+				}
+			} else {
+				MapperLog.Error(err, "Deploymet error")
+			}
+			MapperLog.Info("Snat Polcies Info Obj", "mapper handling NameSpace OBJ ###", pod)
+			namespace := &corev1.Namespace{}
+			err = c.Get(context.TODO(), types.NamespacedName{Name: pod.ObjectMeta.Namespace}, namespace)
+			if err == nil {
+				for _, label := range item.Spec.Selector.Labels {
+					if _, ok := namespace.ObjectMeta.Labels[label.Key]; ok {
+						if label.Value == namespace.ObjectMeta.Labels[label.Key] {
+							MapperLog.Info("Snat Polcies Matching", "Labels for  NameSpace OBJ ###", namespace.ObjectMeta.Labels)
+							requests = append(requests, reconcile.Request{
+								NamespacedName: types.NamespacedName{
+									Namespace: pod.ObjectMeta.Namespace,
+									Name:      "snat-policyforpod-" + item.ObjectMeta.Name + "-" + pod.ObjectMeta.Name + "-" + "namepsace",
+								},
+							})
+							break Loop
+						}
+					}
+				}
+			} else {
+				MapperLog.Error(err, "Name Space error")
 			}
 		}
 	}
 	return requests
+}
+
+func HandlePodsForDeployment(client client.Client, predicates []predicate.Predicate) handler.Mapper {
+	return &handleSnatPoliciesMapper{client, predicates}
+}
+func HandlePodsForNameSpace(client client.Client, predicates []predicate.Predicate) handler.Mapper {
+	return &handleSnatPoliciesMapper{client, predicates}
 }

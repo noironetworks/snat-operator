@@ -9,6 +9,7 @@ import (
 
 	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 	"github.com/prometheus/common/log"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -22,17 +23,33 @@ const (
 )
 const PORTPERNODES = 3000
 
+// Check if given pod belongs to given deployment or not
+func CheckIfPodForDeployment(c client.Client, pod corev1.Pod, deploymentName, deploymentNamespace string) (bool, error) {
+
+	return false, nil
+}
+
+// Check if given pod belongs to given deployment or not
+func CheckIfPodForNameSpace(c client.Client, pod corev1.Pod, deploymentName, Namespace string) (bool, error) {
+	return false, nil
+}
+
+// Check if given pod belongs to given service or not
+func CheckIfPodForService(corev1.Pod, corev1.Service) bool {
+	return true
+}
+
 // Given a reconcile request name, it extracts out pod name by omiiting snat-policy- from it
 // eg: snat-policy-foo-podname -> podname, foo
-func GetPodNameFromReoncileRequest(requestName string) (string, string) {
+func GetPodNameFromReoncileRequest(requestName string) (string, string, string) {
 
 	temp := strings.Split(requestName, "-")
-	if len(temp) != 4 {
+	if len(temp) < 5 {
 		UtilLog.Info("Length should be 4", "input string:", requestName, "lengthGot", len(temp))
-		return "", ""
+		return "", "", ""
 	}
-	snatPolicyName, podName := temp[2], temp[3]
-	return podName, snatPolicyName
+	snatPolicyName, podName, resType := temp[2], temp[3], temp[4]
+	return podName, snatPolicyName, resType
 }
 
 // Get nodeinfo object matching given name of the node
