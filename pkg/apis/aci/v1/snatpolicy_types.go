@@ -53,9 +53,7 @@ type SnatPolicyList struct {
 }
 
 type PodSelector struct {
-	Labels     []Label `json:"labels,omitempty"`
-	Deployment string  `json:"deployment,omitempty"`
-	Namespace  string  `json:"namespace,omitempty"`
+	Labels []Label `json:"labels,omitempty"`
 }
 
 type Label struct {

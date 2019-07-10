@@ -8,14 +8,10 @@ spec:
       10.20.30.40/30
   selector:
     namespace: foo
-    # deployment: foo-deployment
-    # labels:
-    #   -
-    #     key: sampleKey1
-    #     value: sampleValue1
-    #   -
-    #     key: sampleKey2
-    #     value: sampleValue2
+    labels:
+       -
+         key: name
+         value: development
 
   portRange:
      - 
