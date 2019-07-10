@@ -48,8 +48,8 @@ func GetPodNameFromReoncileRequest(requestName string) (string, string, string) 
 		UtilLog.Info("Length should be 4", "input string:", requestName, "lengthGot", len(temp))
 		return "", "", ""
 	}
-	snatPolicyName, podName, resType := temp[2], temp[3], temp[4]
-	return podName, snatPolicyName, resType
+	snatPolicyName, resName, resType := temp[2], temp[3], temp[4]
+	return resName, snatPolicyName, resType
 }
 
 // Get nodeinfo object matching given name of the node
