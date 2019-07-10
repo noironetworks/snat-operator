@@ -150,6 +150,7 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 		if _, ok := localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)]; ok {
 			nodeName := foundPod.Spec.NodeName
 			snatIp := localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)].SnatIp
+			inforesType := localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)].SnatScope
 			delete(localInfo.Spec.LocalInfos, string(foundPod.ObjectMeta.UID))
 			if len(localInfo.Spec.LocalInfos) == 0 {
 				_, err = utils.UpdateSnatPolicyStatus(nodeName, snatPolicyName, snatIp, r.client)
@@ -157,6 +158,11 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 					log.Error(err, "Policy Status Update Failed")
 					return reconcile.Result{}, err
 				}
+			}
+			if inforesType == "pod" && (resType == "deployment" || resType == "namespace") {
+				return reconcile.Result{}, nil
+			} else if inforesType == "deployment" && resType == "namespace" {
+				return reconcile.Result{}, nil
 			}
 			return utils.UpdateLocalInfoCR(r.client, localInfo)
 		}
