@@ -151,7 +151,7 @@ Loop:
 				}
 			} else if err != nil && errors.IsNotFound(err) {
 				MapperLog.Info("Obj", "No deployment found with: ", depname)
-			} else {
+			} else if err != nil {
 				MapperLog.Error(err, " deployment get error")
 			}
 
@@ -171,7 +171,7 @@ Loop:
 				}
 			} else if err != nil && errors.IsNotFound(err) {
 				MapperLog.Info("Obj", "No namespace found with: ", namespace)
-			} else {
+			} else if err != nil {
 				MapperLog.Error(err, "namespace get error")
 			}
 		}

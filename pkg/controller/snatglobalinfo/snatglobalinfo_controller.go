@@ -105,12 +105,10 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			log.Info("Deleted LOCAL CR for Node #####", "Updating the GlobalInfo", instance.ObjectMeta.Name)
 			isSnatLocalInfoDeleted := instance.GetDeletionTimestamp() != nil
-			log.Info("Deleted LOCAL CR for Node #####", "Updating the GlobalInfo")
 			if isSnatLocalInfoDeleted {
 				//delete(globalInfo.Spec.GlobalInfos, instance.ObjectMeta.Name)
-				log.Info("Deleted LOCAL CR for Node #####", "Updating the GlobalInfo", instance.ObjectMeta.Name)
+				log.Info("Deleted LOCAL CR for Node: ", "Updating the GlobalInfo: ", instance.ObjectMeta.Name)
 				//return utils.UpdateGlobalInfoCR(r.client, *globalInfo)
 			}
 			return reconcile.Result{}, nil
@@ -144,11 +142,13 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 				return reconcile.Result{}, err
 			}
 			globalInfos := []aciv1.GlobalInfo{}
+			portlist := []aciv1.PortRange{}
+			portlist = append(portlist, portrange)
 			// get Mac Addres
 			for snatIp, _ := range localips {
 				temp := aciv1.GlobalInfo{
 					MacAddress: nodeinfo.Spec.MacAddress,
-					PortRanges: portrange,
+					PortRanges: portlist,
 					SnatIp:     snatIp,
 					SnatIpUid:  string(uuid.NewUUID()),
 					Protocols:  []string{"tcp", "udp", "icmp"},
@@ -198,9 +198,11 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 					return reconcile.Result{}, err
 				}
 				log.Info("Update Global GR for getting PortsRage  #####", "Portrage:", portrange)
+				portlist := []aciv1.PortRange{}
+				portlist = append(portlist, portrange)
 				temp := aciv1.GlobalInfo{
 					MacAddress: nodeinfo.Spec.MacAddress,
-					PortRanges: portrange,
+					PortRanges: portlist,
 					SnatIp:     snatIp,
 					SnatIpUid:  string(uuid.NewUUID()),
 					Protocols:  []string{"tcp", "udp", "icmp"},
