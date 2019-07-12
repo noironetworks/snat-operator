@@ -75,7 +75,7 @@ func (h *handleSnatPoliciesMapper) Map(obj handler.MapObject) []reconcile.Reques
 	var requests []reconcile.Request
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Name: "snat-policy-" + snatpolicy.ObjectMeta.Name + "-" + "created" + "-" + "new",
+			Name: "snat-policy$" + snatpolicy.ObjectMeta.Name + "$" + "created" + "$" + "new",
 		},
 	})
 	return requests
@@ -113,7 +113,7 @@ Loop:
 				requests = append(requests, reconcile.Request{
 					NamespacedName: types.NamespacedName{
 						Namespace: pod.ObjectMeta.Namespace,
-						Name:      "snat-policyforpod-" + item.ObjectMeta.Name + "-" + pod.ObjectMeta.Name + "-" + "pod",
+						Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "pod",
 					},
 				})
 				break Loop
@@ -124,7 +124,7 @@ Loop:
 				if rs.Kind == "ReplicaSet" && rs.Name != "" {
 					err := c.Get(context.TODO(), types.NamespacedName{Name: rs.Name}, replicaset)
 					if err != nil {
-						MapperLog.Error(err, "Replication get  Failed")
+						//MapperLog.Error(err, "Replication get  Failed")
 					}
 					break
 				}
@@ -137,14 +137,15 @@ Loop:
 					break
 				}
 			}
-			err := c.Get(context.TODO(), types.NamespacedName{Name: depname}, deployment)
+			// Need to revisit this code how to set proper NameSpace here
+			err := c.Get(context.TODO(), types.NamespacedName{Namespace: "default", Name: depname}, deployment)
 			if err == nil {
 				MapperLog.Info("Snat Polcies Info Obj", "Labels for  Deployment OBJ ###", deployment.ObjectMeta.Labels)
 				if utils.MatchLabels(item.Spec.Selector.Labels, deployment.ObjectMeta.Labels) {
 					requests = append(requests, reconcile.Request{
 						NamespacedName: types.NamespacedName{
 							Namespace: pod.ObjectMeta.Namespace,
-							Name:      "snat-policyforpod-" + item.ObjectMeta.Name + "-" + pod.ObjectMeta.Name + "_" + "deployment",
+							Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "deployment",
 						},
 					})
 					break Loop
@@ -152,7 +153,7 @@ Loop:
 			} else if err != nil && errors.IsNotFound(err) {
 				MapperLog.Info("Obj", "No deployment found with: ", depname)
 			} else if err != nil {
-				MapperLog.Error(err, " deployment get error")
+				//MapperLog.Error(err, " deployment get error")
 			}
 
 			MapperLog.Info("Snat Polcies Info Obj", "mapper handling NameSpace OBJ ###", pod)
@@ -164,7 +165,7 @@ Loop:
 					requests = append(requests, reconcile.Request{
 						NamespacedName: types.NamespacedName{
 							Namespace: pod.ObjectMeta.Namespace,
-							Name:      "snat-policyforpod-" + item.ObjectMeta.Name + "-" + pod.ObjectMeta.Name + "-" + "namepsace",
+							Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "namepsace",
 						},
 					})
 					break Loop
@@ -172,7 +173,7 @@ Loop:
 			} else if err != nil && errors.IsNotFound(err) {
 				MapperLog.Info("Obj", "No namespace found with: ", namespace)
 			} else if err != nil {
-				MapperLog.Error(err, "namespace get error")
+				//MapperLog.Error(err, "namespace get error")
 			}
 		}
 	}
@@ -198,7 +199,7 @@ func (h *handleDeployment) Map(obj handler.MapObject) []reconcile.Request {
 	}
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Name: "snat-deployment-" + "labelchange" + "-" + deployment.ObjectMeta.Name + "-" + "deployment",
+			Name: "snat-deployment$" + deployment.ObjectMeta.Namespace + "$" + deployment.ObjectMeta.Name + "$" + "deployment",
 		},
 	})
 	return requests
@@ -217,7 +218,7 @@ func (h *handleNamespace) Map(obj handler.MapObject) []reconcile.Request {
 	}
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Name: "snat-namespace-" + "labelchange" + "-" + namespace.ObjectMeta.Name + "-" + "namespace",
+			Name: "snat-namespace$" + "labelchange" + "$" + namespace.ObjectMeta.Name + "$" + "namespace",
 		},
 	})
 	return requests

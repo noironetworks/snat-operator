@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"sort"
-	// snattypes "github.com/gaurav-dalvi/snat-operator/pkg/apis/aci/v1"
 )
 
 func inc(ip net.IP) {
@@ -30,7 +29,7 @@ func GetIPsFromCIDR(cidr string) []string {
 	for ip := ip.Mask(ipnet.Mask); ipnet.Contains(ip); inc(ip) {
 		output = append(output, ip.String())
 	}
-	return output[1 : len(output)-1]
+	return output[0:len(output)]
 }
 
 // Given two slices of IP addresses, finds the difference of two sets
@@ -79,19 +78,3 @@ func sortIps(ips []string) []string {
 	}
 	return outputIps
 }
-
-
-// // This function will be repaced depeding upon design choice.
-// func GetReservedPortRanges() []snattypes.PortRange {
-// 	reservedPorts := []snattypes.PortRange{
-// 		snattypes.PortRange{Start: 1, End: 1},
-// 		snattypes.PortRange{Start: 20, End: 22},
-// 		snattypes.PortRange{Start: 29, End: 29},
-// 		snattypes.PortRange{Start: 37, End: 37},
-// 		snattypes.PortRange{Start: 42, End: 43},
-// 		snattypes.PortRange{Start: 108, End: 110},
-// 		snattypes.PortRange{Start: 443, End: 445},
-// 		snattypes.PortRange{Start: 1080, End: 1080},
-// 	}
-// 	return reservedPorts
-// }
