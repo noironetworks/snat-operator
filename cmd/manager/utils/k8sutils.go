@@ -178,15 +178,10 @@ func UpdateGlobalInfoCR(c client.Client, globalInfo aciv1.SnatGlobalInfo) (recon
 }
 
 // Get IP and port for pod for which notification has come to reconcile loop
-func GetIPPortRangeForPod(NodeName string, snatPolicyName string, c client.Client) (string, aciv1.PortRange, bool, error) {
+func GetIPPortRangeForPod(NodeName string, snatpolicy *aciv1.SnatPolicy) (string, aciv1.PortRange, bool) {
 	log.Info("Get Port Range For", "Node name: ", NodeName)
-	foundSnatPolicy, err := GetSnatPolicyCR(c, snatPolicyName)
-	if err != nil {
-		log.Error(err, "not matching snatpolicy", snatPolicyName)
-		return "", aciv1.PortRange{}, false, err
-	}
-	snatPortsAllocated := foundSnatPolicy.Status.SnatPortsAllocated
-	snatIps := ExpandCIDRs(foundSnatPolicy.Spec.SnatIp)
+	snatPortsAllocated := snatpolicy.Status.SnatPortsAllocated
+	snatIps := ExpandCIDRs(snatpolicy.Spec.SnatIp)
 	var portRange aciv1.PortRange
 	portRange.Start = MIN_PORT
 	portRange.End = MAX_PORT
@@ -194,7 +189,7 @@ func GetIPPortRangeForPod(NodeName string, snatPolicyName string, c client.Clien
 	currPortRange = append(currPortRange, portRange)
 	expandedsnatports := ExpandPortRanges(currPortRange, PORTPERNODES)
 	if len(snatPortsAllocated) == 0 {
-		return snatIps[0], expandedsnatports[0], false, nil
+		return snatIps[0], expandedsnatports[0], false
 	}
 	for _, v := range snatIps {
 		if _, ok := snatPortsAllocated[v]; ok {
@@ -202,7 +197,7 @@ func GetIPPortRangeForPod(NodeName string, snatPolicyName string, c client.Clien
 			if len(snatPortsAllocated[v]) < len(expandedsnatports) {
 				for _, val := range snatPortsAllocated[v] {
 					if val.NodeName == NodeName {
-						return v, val.PortRange, true, nil
+						return v, val.PortRange, true
 					}
 				}
 				m := map[int]int{}
@@ -212,18 +207,22 @@ func GetIPPortRangeForPod(NodeName string, snatPolicyName string, c client.Clien
 				for i, Val2 := range expandedsnatports {
 					if _, ok := m[Val2.Start]; !ok {
 						log.Info("Created New Port Range for new NodeName ", "SnatGlobalInfo", expandedsnatports[i])
-						return v, expandedsnatports[i], false, nil
+						return v, expandedsnatports[i], false
 					}
 				}
 			}
 		}
 	}
-	return "", aciv1.PortRange{}, false, nil
+	return "", aciv1.PortRange{}, false
 }
 func UpdateSnatPolicyStatus(NodeName string, snatPolicyName string, snatIp string, c client.Client) (reconcile.Result, error) {
 	foundSnatPolicy, err := GetSnatPolicyCR(c, snatPolicyName)
 	if err != nil {
 		log.Error(err, "not matching snatpolicy", snatPolicyName)
+		return reconcile.Result{}, nil
+	}
+
+	if foundSnatPolicy.GetDeletionTimestamp() != nil {
 		return reconcile.Result{}, nil
 	}
 	if _, ok := foundSnatPolicy.Status.SnatPortsAllocated[snatIp]; ok {
@@ -235,6 +234,7 @@ func UpdateSnatPolicyStatus(NodeName string, snatPolicyName string, snatIp strin
 				break
 			}
 		}
+		log.Info("Updated Node Port Range for santIP ############# ", "snatIP", nodePortRange)
 		foundSnatPolicy.Status.SnatPortsAllocated[snatIp] = nodePortRange
 		err = c.Status().Update(context.TODO(), &foundSnatPolicy)
 		if err != nil {

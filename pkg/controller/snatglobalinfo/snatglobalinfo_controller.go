@@ -122,6 +122,7 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 		log.Info("Deleted LOCAL CR2 for Node #####", "Updating the GlobalInfo", instance.ObjectMeta.Name)
 		//return utils.UpdateGlobalInfoCR(r.client, *globalInfo)
 	}
+
 	// Create  get the local ip -> Snat Policy refrences
 	localips := make(map[string][]string)
 	var snatip string
@@ -141,7 +142,14 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create SnatGlobalInfo Object
-			_, portrange, _, err := utils.GetIPPortRangeForPod(instance.ObjectMeta.Name, localips[snatip][0], r.client)
+			snatPolicy, err := utils.GetSnatPolicyCR(r.client, localips[snatip][0])
+			if err != nil && errors.IsNotFound(err) {
+				log.Error(err, "not matching snatpolicy")
+				return reconcile.Result{}, nil
+			} else if err != nil {
+				return reconcile.Result{}, err
+			}
+			_, portrange, _ := utils.GetIPPortRangeForPod(instance.ObjectMeta.Name, &snatPolicy)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
@@ -196,7 +204,14 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 				}
 			}
 			if found == false {
-				_, portrange, _, err := utils.GetIPPortRangeForPod(instance.ObjectMeta.Name, localips[snatIp][0], r.client)
+				snatPolicy, err := utils.GetSnatPolicyCR(r.client, localips[snatip][0])
+				if err != nil && errors.IsNotFound(err) {
+					log.Error(err, "not matching snatpolicy")
+					return reconcile.Result{}, nil
+				} else if err != nil {
+					return reconcile.Result{}, err
+				}
+				_, portrange, _ := utils.GetIPPortRangeForPod(instance.ObjectMeta.Name, &snatPolicy)
 				if err != nil {
 					log.Error(err, "Update Global CR for getting PortsRage  FAILED#####", portrange)
 					return reconcile.Result{}, err
