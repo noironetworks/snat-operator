@@ -6,6 +6,7 @@ import (
 	"github.com/noironetworks/snat-operator/cmd/manager/utils"
 
 	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
+	appsv2 "github.com/openshift/api/apps/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -32,6 +33,10 @@ type handleDeployment struct {
 	predicates []predicate.Predicate
 }
 type handleNamespace struct {
+	client     client.Client
+	predicates []predicate.Predicate
+}
+type handleDeploymentConfig struct {
 	client     client.Client
 	predicates []predicate.Predicate
 }
@@ -129,7 +134,6 @@ Loop:
 					break
 				}
 			}
-			deployment := &appsv1.Deployment{}
 			var depname string
 			for _, dep := range replicaset.OwnerReferences {
 				if dep.Kind == "Deployment" && dep.Name != "" {
@@ -137,28 +141,59 @@ Loop:
 					break
 				}
 			}
-			// Need to revisit this code how to set proper NameSpace here
-			err := c.Get(context.TODO(), types.NamespacedName{Namespace: "default", Name: depname}, deployment)
-			if err == nil {
-				MapperLog.Info("Snat Polcies Info Obj", "Labels for  Deployment OBJ ###", deployment.ObjectMeta.Labels)
-				if utils.MatchLabels(item.Spec.Selector.Labels, deployment.ObjectMeta.Labels) {
-					requests = append(requests, reconcile.Request{
-						NamespacedName: types.NamespacedName{
-							Namespace: pod.ObjectMeta.Namespace,
-							Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "deployment",
-						},
-					})
-					break Loop
+			// Check for Matching Label for Deployment
+			if depname != "" {
+				deployment := &appsv1.Deployment{}
+				// Need to revisit this code how to set proper NameSpace here
+				err := c.Get(context.TODO(), types.NamespacedName{Namespace: "default", Name: depname}, deployment)
+				if err == nil {
+					MapperLog.Info("Snat Polcies Info Obj", "Labels for  Deployment OBJ ###", deployment.ObjectMeta.Labels)
+					if utils.MatchLabels(item.Spec.Selector.Labels, deployment.ObjectMeta.Labels) {
+						requests = append(requests, reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Namespace: pod.ObjectMeta.Namespace,
+								Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "deployment",
+							},
+						})
+						break Loop
+					}
+				} else if err != nil && errors.IsNotFound(err) {
+					MapperLog.Info("Obj", "No deployment found with: ", depname)
+				} else if err != nil {
+					//MapperLog.Error(err, " deployment get error")
 				}
-			} else if err != nil && errors.IsNotFound(err) {
-				MapperLog.Info("Obj", "No deployment found with: ", depname)
-			} else if err != nil {
-				//MapperLog.Error(err, " deployment get error")
 			}
-
+			// Check for Matching Label for Deployment Config
+			var depconfname string
+			for _, dep := range replicaset.OwnerReferences {
+				if dep.Kind == "DeploymentConfig" && dep.Name != "" {
+					depconfname = dep.Name
+					break
+				}
+			}
+			if depconfname != "" {
+				deploymentconfig := &appsv2.DeploymentConfig{}
+				err := c.Get(context.TODO(), types.NamespacedName{Namespace: "default", Name: depconfname}, deploymentconfig)
+				if err == nil {
+					MapperLog.Info("Snat Polcies Info Obj", "Labels for  Deployment OBJ ###", deploymentconfig.ObjectMeta.Labels)
+					if utils.MatchLabels(item.Spec.Selector.Labels, deploymentconfig.ObjectMeta.Labels) {
+						requests = append(requests, reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Namespace: pod.ObjectMeta.Namespace,
+								Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "deployment",
+							},
+						})
+						break Loop
+					}
+				} else if err != nil && errors.IsNotFound(err) {
+					MapperLog.Info("Obj", "No deploymentConfig found with: ", depname)
+				} else if err != nil {
+					//MapperLog.Error(err, " deployment get error")
+				}
+			}
 			MapperLog.Info("Snat Polcies Info Obj", "mapper handling NameSpace OBJ ###", pod)
 			namespace := &corev1.Namespace{}
-			err = c.Get(context.TODO(), types.NamespacedName{Name: pod.ObjectMeta.Namespace}, namespace)
+			err := c.Get(context.TODO(), types.NamespacedName{Name: pod.ObjectMeta.Namespace}, namespace)
 			if err == nil {
 				if utils.MatchLabels(item.Spec.Selector.Labels, namespace.ObjectMeta.Labels) {
 					MapperLog.Info("Snat Polcies Matching", "Labels for  NameSpace OBJ ###", namespace.ObjectMeta.Labels)
@@ -187,6 +222,10 @@ func HandleNameSpaceForNameSpaceMapper(client client.Client, predicates []predic
 	return &handleNamespace{client, predicates}
 }
 
+func HandleDeploymentConfigForDeploymentMapper(client client.Client, predicates []predicate.Predicate) handler.Mapper {
+	return &handleDeploymentConfig{client, predicates}
+}
+
 func (h *handleDeployment) Map(obj handler.MapObject) []reconcile.Request {
 	MapperLog.Info("Deployment  Info Obj", "mapper handling first ###", obj.Object)
 	var requests []reconcile.Request
@@ -200,6 +239,24 @@ func (h *handleDeployment) Map(obj handler.MapObject) []reconcile.Request {
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Name: "snat-deployment$" + deployment.ObjectMeta.Namespace + "$" + deployment.ObjectMeta.Name + "$" + "deployment",
+		},
+	})
+	return requests
+}
+
+func (h *handleDeploymentConfig) Map(obj handler.MapObject) []reconcile.Request {
+	MapperLog.Info("Deployment  Info Obj", "mapper handling first ###", obj.Object)
+	var requests []reconcile.Request
+	if obj.Object == nil {
+		return nil
+	}
+	deployment, ok := obj.Object.(*appsv2.DeploymentConfig)
+	if !ok {
+		return nil
+	}
+	requests = append(requests, reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name: "snat-deploymentconfig$" + deployment.ObjectMeta.Namespace + "$" + deployment.ObjectMeta.Name + "$" + "deployment",
 		},
 	})
 	return requests

@@ -413,6 +413,14 @@
   version = "1.0.1"
 
 [[projects]]
+  branch = "master"
+  digest = "1:8d0df1544864b34f53e62df36d0d7343a00603f8a7a5c2e5b60d80561241fe3f"
+  name = "github.com/openshift/api"
+  packages = ["apps/v1"]
+  pruneopts = "NT"
+  revision = "acaf712b5c5cbe88bdffd569a3481cf9ebbfab7c"
+
+[[projects]]
   digest = "1:fe3c97fb1956829a81d7b8221b4710c40d6dae2c6c3b4d222db5b7f96c975d99"
   name = "github.com/operator-framework/operator-sdk"
   packages = [
@@ -1133,6 +1141,7 @@
   input-imports = [
     "github.com/go-logr/logr",
     "github.com/go-openapi/spec",
+    "github.com/openshift/api/apps/v1",
     "github.com/operator-framework/operator-sdk/pkg/leader",
     "github.com/operator-framework/operator-sdk/pkg/log/zap",
     "github.com/operator-framework/operator-sdk/pkg/metrics",
