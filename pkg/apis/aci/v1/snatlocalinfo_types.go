@@ -53,6 +53,7 @@ type LocalInfo struct {
 	PodNamespace   string `json:"podNamespace"`
 	SnatIp         string `json:"snatIp"`
 	SnatPolicyName string `json:"snatPolicyName"`
+	SnatScope      string `json:"resourcetype"`
 }
 
 func init() {

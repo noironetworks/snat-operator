@@ -47,10 +47,10 @@ type SnatGlobalInfoList struct {
 }
 
 type GlobalInfo struct {
-	MacAddress string    `json:"macAddress"`
-	PortRanges PortRange `json:"portRanges"`
-	SnatIp     string    `json:"snatIp"`
-	SnatIpUid  string    `json:"snatIpUid"`
+	MacAddress string      `json:"macAddress"`
+	PortRanges []PortRange `json:"portRanges"`
+	SnatIp     string      `json:"snatIp"`
+	SnatIpUid  string      `json:"snatIpUid"`
 	// +kubebuilder:validation:Enum=tcp,udp,icmp
 	Protocols []string `json:"protocols"`
 }

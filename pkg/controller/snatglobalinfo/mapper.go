@@ -37,7 +37,7 @@ func (h *handleLocalInfosMapper) Map(obj handler.MapObject) []reconcile.Request 
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Namespace: localInfo.ObjectMeta.Namespace,
-			Name:      "snat-localinfo-" + localInfo.ObjectMeta.Name,
+			Name:      "snat-localinfo$" + localInfo.ObjectMeta.Name,
 		},
 	})
 
