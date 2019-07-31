@@ -149,7 +149,12 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 			} else if err != nil {
 				return reconcile.Result{}, err
 			}
-			_, portrange, _ := utils.GetIPPortRangeForPod(instance.ObjectMeta.Name, &snatPolicy)
+			var portrange aciv1.PortRange
+			if len(snatPolicy.Spec.SnatIp) == 0 {
+				portrange, _ = utils.GetPortRangeForServiceIP(instance.ObjectMeta.Name, &snatPolicy, snatip)
+			} else {
+				_, portrange, _ = utils.GetIPPortRangeForPod(instance.ObjectMeta.Name, &snatPolicy)
+			}
 			if err != nil {
 				return reconcile.Result{}, err
 			}
@@ -211,10 +216,11 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 				} else if err != nil {
 					return reconcile.Result{}, err
 				}
-				_, portrange, _ := utils.GetIPPortRangeForPod(instance.ObjectMeta.Name, &snatPolicy)
-				if err != nil {
-					log.Error(err, "Update Global CR for getting PortsRage  FAILED#####", portrange)
-					return reconcile.Result{}, err
+				var portrange aciv1.PortRange
+				if len(snatPolicy.Spec.SnatIp) == 0 {
+					portrange, _ = utils.GetPortRangeForServiceIP(instance.ObjectMeta.Name, &snatPolicy, snatip)
+				} else {
+					_, portrange, _ = utils.GetIPPortRangeForPod(instance.ObjectMeta.Name, &snatPolicy)
 				}
 				log.Info("Update Global CR for getting PortsRage  #####", "Portrage:", portrange)
 				portlist := []aciv1.PortRange{}
