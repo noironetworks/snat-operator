@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -112,6 +113,32 @@ Loop:
 			// 2: Deployment labels should match exactly with Policy labels
 			// 3: Namespace labels should match exactly with Policy labels
 			// right now namespace approach is implemented.
+
+			// This case is for Services
+			if len(item.Spec.SnatIp) == 0 {
+				// Handle it for Services.
+				ls := make(map[string]string)
+				ls["app"] = pod.ObjectMeta.Labels["app"]
+				selector := labels.SelectorFromSet(labels.Set(ls))
+				SerivesList := &corev1.ServiceList{}
+				err := c.List(context.TODO(),
+					&client.ListOptions{
+						LabelSelector: selector,
+					},
+					SerivesList)
+				if err == nil {
+					if utils.MatchLabels(item.Spec.Selector.Labels, SerivesList.Items[0].ObjectMeta.Labels) {
+						requests = append(requests, reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Namespace: pod.ObjectMeta.Namespace,
+								Name:      "snat-policyforservicepod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + SerivesList.Items[0].Spec.ClusterIP,
+							},
+						})
+						break Loop
+					}
+				}
+
+			}
 
 			if utils.MatchLabels(item.Spec.Selector.Labels, pod.ObjectMeta.Labels) {
 				MapperLog.Info("Snat Polcies Info Obj", "Matches Pod Lables###", pod.ObjectMeta.Labels)
