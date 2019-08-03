@@ -33,14 +33,20 @@ type handleDeployment struct {
 	client     client.Client
 	predicates []predicate.Predicate
 }
+type handleService struct {
+	client     client.Client
+	predicates []predicate.Predicate
+}
 type handleNamespace struct {
 	client     client.Client
 	predicates []predicate.Predicate
 }
+
+/*
 type handleDeploymentConfig struct {
 	client     client.Client
 	predicates []predicate.Predicate
-}
+}*/
 
 func (h *handlePodsForPodsMapper) Map(obj handler.MapObject) []reconcile.Request {
 	if obj.Object == nil {
@@ -127,16 +133,19 @@ Loop:
 					},
 					SerivesList)
 				if err == nil {
-					if utils.MatchLabels(item.Spec.Selector.Labels, SerivesList.Items[0].ObjectMeta.Labels) {
-						requests = append(requests, reconcile.Request{
-							NamespacedName: types.NamespacedName{
-								Namespace: pod.ObjectMeta.Namespace,
-								Name:      "snat-policyforservicepod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + SerivesList.Items[0].Spec.ClusterIP,
-							},
-						})
-						break Loop
+					for _, service := range SerivesList.Items {
+						if utils.MatchLabels(item.Spec.Selector.Labels, service.ObjectMeta.Labels) {
+							requests = append(requests, reconcile.Request{
+								NamespacedName: types.NamespacedName{
+									Namespace: pod.ObjectMeta.Namespace,
+									Name:      "snat-policyforservicepod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + service.Status.LoadBalancer.Ingress[0].IP,
+								},
+							})
+							break Loop
+						}
 					}
 				}
+				return requests
 
 			}
 
@@ -190,9 +199,19 @@ Loop:
 					//MapperLog.Error(err, " deployment get error")
 				}
 			}
+			rc := &corev1.ReplicationController{}
+			for _, rs := range pod.OwnerReferences {
+				if rs.Kind == "ReplicationController" && rs.Name != "" {
+					err := c.Get(context.TODO(), types.NamespacedName{Name: rs.Name}, rc)
+					if err != nil {
+						//MapperLog.Error(err, "Replication get  Failed")
+					}
+					break
+				}
+			}
 			// Check for Matching Label for Deployment Config
 			var depconfname string
-			for _, dep := range replicaset.OwnerReferences {
+			for _, dep := range rc.OwnerReferences {
 				if dep.Kind == "DeploymentConfig" && dep.Name != "" {
 					depconfname = dep.Name
 					break
@@ -249,10 +268,13 @@ func HandleNameSpaceForNameSpaceMapper(client client.Client, predicates []predic
 	return &handleNamespace{client, predicates}
 }
 
+/*
 func HandleDeploymentConfigForDeploymentMapper(client client.Client, predicates []predicate.Predicate) handler.Mapper {
 	return &handleDeploymentConfig{client, predicates}
+}*/
+func HandleServicesForServiceMapper(client client.Client, predicates []predicate.Predicate) handler.Mapper {
+	return &handleService{client, predicates}
 }
-
 func (h *handleDeployment) Map(obj handler.MapObject) []reconcile.Request {
 	MapperLog.Info("Deployment  Info Obj", "mapper handling first ###", obj.Object)
 	var requests []reconcile.Request
@@ -271,8 +293,9 @@ func (h *handleDeployment) Map(obj handler.MapObject) []reconcile.Request {
 	return requests
 }
 
+/*
 func (h *handleDeploymentConfig) Map(obj handler.MapObject) []reconcile.Request {
-	MapperLog.Info("Deployment  Info Obj", "mapper handling first ###", obj.Object)
+	MapperLog.Info("DeploymentConfig  Info Obj", "mapper handling first ###", obj.Object)
 	var requests []reconcile.Request
 	if obj.Object == nil {
 		return nil
@@ -288,6 +311,7 @@ func (h *handleDeploymentConfig) Map(obj handler.MapObject) []reconcile.Request 
 	})
 	return requests
 }
+*/
 
 func (h *handleNamespace) Map(obj handler.MapObject) []reconcile.Request {
 	var requests []reconcile.Request
@@ -303,6 +327,28 @@ func (h *handleNamespace) Map(obj handler.MapObject) []reconcile.Request {
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Name: "snat-namespace$" + "labelchange" + "$" + namespace.ObjectMeta.Name + "$" + "namespace",
+		},
+	})
+	return requests
+}
+
+func (h *handleService) Map(obj handler.MapObject) []reconcile.Request {
+	var requests []reconcile.Request
+	MapperLog.Info("Service Info Obj", "mapper handling first ###", obj.Object)
+	if obj.Object == nil {
+		return nil
+	}
+
+	service, ok := obj.Object.(*corev1.Service)
+	if !ok {
+		return nil
+	}
+	if len(service.Status.LoadBalancer.Ingress) == 0 {
+		return nil
+	}
+	requests = append(requests, reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name: "snat-service$" + service.ObjectMeta.Namespace + "$" + service.ObjectMeta.Name + "$" + service.Status.LoadBalancer.Ingress[0].IP,
 		},
 	})
 	return requests
