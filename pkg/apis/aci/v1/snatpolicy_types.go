@@ -4,6 +4,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type PolicyState string
+
+const (
+	Ready      PolicyState = "Ready"
+	Failed     PolicyState = "Failed"
+)
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
@@ -26,8 +33,8 @@ type SnatPolicyStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file7
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
-	//Expandedsnatports  []PortRange                `json:"expandedsnatports,omitempty"`
-	SnatPortsAllocated map[string][]NodePortRange `json:"snat-allocation,omitempty"`
+	SnatPortsAllocated map[string][]NodePortRange `json:"snatPortsAllocated,omitempty"`
+	State              PolicyState `json:"state"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

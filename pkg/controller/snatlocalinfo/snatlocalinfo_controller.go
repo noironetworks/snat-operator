@@ -6,7 +6,6 @@ import (
 	"os"
 	"reflect"
 	"strings"
-
 	"github.com/noironetworks/snat-operator/cmd/manager/utils"
 	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 	openv1 "github.com/openshift/api/apps/v1"
@@ -270,6 +269,9 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyEvent(request reconcile.Request
 		}
 		isSnatPolicyDeleted = snatPolicy.GetDeletionTimestamp() != nil
 	}
+	if snatPolicy.Status.State != aciv1.Ready {
+		return reconcile.Result{}, nil
+	}
 	if len(snatPolicy.Spec.SnatIp) == 0 {
 		// This case will arise in case of Services
 		return r.handleSnatPolicyForServices(&snatPolicy, status)
@@ -450,7 +452,7 @@ func (r *ReconcileSnatLocalInfo) snatPolicyUpdate(existingPods *corev1.PodList,
 				}
 			}
 		} else if deleted {
-			log.Info("nat Policy Deleted: ", "Snat Policy", deleted)
+			log.Info("Snat Policy Deleted: ", "Snat Policy", deleted)
 			if _, ok := localInfo.Spec.LocalInfos[string(pod.ObjectMeta.UID)]; ok {
 				inforesType := localInfo.Spec.LocalInfos[string(pod.ObjectMeta.UID)].SnatScope
 				if inforesType == POD && (resType != POD) {
@@ -779,6 +781,9 @@ func (r *ReconcileSnatLocalInfo) updatePods(Pods *corev1.PodList, matches bool, 
 		}
 	} else {
 		for _, item := range snatPolicyList.Items {
+			 if item.Status.State != aciv1.Ready {
+				continue;
+			}
 			snatPolicy, err := utils.GetSnatPolicyCR(r.client, item.ObjectMeta.Name)
 			if err != nil && errors.IsNotFound(err) {
 				log.Error(err, "not matching snatpolicy")
@@ -1047,6 +1052,9 @@ func (r *ReconcileSnatLocalInfo) handleServiceEvent(request reconcile.Request) (
 
 	} else {
 		for _, item := range snatPolicyList.Items {
+			 if item.Status.State != aciv1.Ready {
+                                continue;
+                        }
 			snatPolicy, err := utils.GetSnatPolicyCR(r.client, item.ObjectMeta.Name)
 			if err != nil && errors.IsNotFound(err) {
 				log.Error(err, "not matching snatpolicy")
@@ -1103,6 +1111,9 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForCluster(snatPolicy *aciv1.Sn
 }
 
 func (r *ReconcileSnatLocalInfo) handleSnatPolicyForNameSpace(snatPolicy *aciv1.SnatPolicy, status string) (reconcile.Result, error) {
+	 if snatPolicy.Status.State != aciv1.Ready {
+                return reconcile.Result{}, nil
+        }
 	nameSpacePods := &corev1.PodList{}
 	isSnatPolicyDeleted := snatPolicy.GetDeletionTimestamp() != nil
 	// SnatPolicy is updated so delete the old Object

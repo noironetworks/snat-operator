@@ -105,15 +105,17 @@ func (r *ReconcileSnatPolicy) Reconcile(request reconcile.Request) (reconcile.Re
 	validator := utils.Validator{}
 	validator.ValidateSnatIP(instance, r.client)
 	if !validator.Validated {
-		reqLogger.Error(err, "SnatIP Policy is not valid, hence deleting it : "+validator.ErrorMessage)
-		// Deleting snatip instance
-		err = r.client.Delete(context.TODO(), instance)
-		if err != nil {
-			reqLogger.Error(err, "failed to delete a Snatpolicy item : "+instance.ObjectMeta.Name)
-			return reconcile.Result{}, err
-		}
+		instance.Status.State = aciv1.Failed
+		reqLogger.Info("Policy failed")
+		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
+	instance.Status.State = aciv1.Ready
+	err = r.client.Status().Update(context.TODO(), instance)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	reqLogger.Info("Policy successfully applied")
 
 	// Add finalizer for this CR
 	if !utils.Contains(instance.GetFinalizers(), snatPolicyFinalizer) {
