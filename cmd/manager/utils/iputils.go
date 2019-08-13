@@ -24,8 +24,18 @@ func GetIPsFromCIDR(cidr string) []string {
 
 	ip, ipnet, err := net.ParseCIDR(cidr)
 	if err != nil {
-		UtilLog.Error(err, "Invalid CIDR, skiiping this one", cidr)
+		ip_temp := net.ParseIP(cidr)
+		if ip_temp != nil && ip_temp.To4() != nil {
+			cidr = cidr + "/32"
+			ip, ipnet, _ = net.ParseCIDR(cidr)
+		} else if ip_temp != nil && ip_temp.To16() != nil {
+			cidr = cidr + "/128"
+			ip, ipnet, _ = net.ParseCIDR(cidr)
+		} else {
+			UtilLog.Error(err, "Invalid CIDR, skipping this one", cidr)
+		}
 	}
+
 	for ip := ip.Mask(ipnet.Mask); ipnet.Contains(ip); inc(ip) {
 		output = append(output, ip.String())
 	}
