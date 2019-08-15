@@ -2,6 +2,7 @@ package snatlocalinfo
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/noironetworks/snat-operator/cmd/manager/utils"
 
@@ -10,7 +11,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -121,32 +121,34 @@ Loop:
 			// right now namespace approach is implemented.
 
 			// This case is for Services
+			if item.Spec.Selector.Namespace != pod.ObjectMeta.Namespace {
+				continue
+			}
 			if len(item.Spec.SnatIp) == 0 {
 				// Handle it for Services.
-				ls := make(map[string]string)
-				ls["app"] = pod.ObjectMeta.Labels["app"]
-				selector := labels.SelectorFromSet(labels.Set(ls))
 				SerivesList := &corev1.ServiceList{}
 				err := c.List(context.TODO(),
 					&client.ListOptions{
-						LabelSelector: selector,
+						Namespace: item.Spec.Selector.Namespace,
 					},
 					SerivesList)
+
 				if err == nil {
 					for _, service := range SerivesList.Items {
-						if utils.MatchLabels(item.Spec.Selector.Labels, service.ObjectMeta.Labels) {
-							requests = append(requests, reconcile.Request{
-								NamespacedName: types.NamespacedName{
-									Namespace: pod.ObjectMeta.Namespace,
-									Name:      "snat-policyforservicepod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + service.Status.LoadBalancer.Ingress[0].IP,
-								},
-							})
-							break Loop
+						if reflect.DeepEqual(pod.ObjectMeta.Labels, service.Spec.Selector) {
+							if utils.MatchLabels(item.Spec.Selector.Labels, service.ObjectMeta.Labels) {
+								requests = append(requests, reconcile.Request{
+									NamespacedName: types.NamespacedName{
+										Namespace: pod.ObjectMeta.Namespace,
+										Name:      "snat-policyforservicepod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + service.Status.LoadBalancer.Ingress[0].IP,
+									},
+								})
+								break Loop
+							}
 						}
 					}
 				}
 				return requests
-
 			}
 
 			if utils.MatchLabels(item.Spec.Selector.Labels, pod.ObjectMeta.Labels) {
