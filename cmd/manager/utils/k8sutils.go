@@ -244,3 +244,35 @@ func UpdateSnatPolicyStatus(NodeName string, snatPolicyName string, snatIp strin
 	}
 	return reconcile.Result{}, nil
 }
+
+func GetPortRangeForServiceIP(NodeName string, snatpolicy *aciv1.SnatPolicy, snatIp string) (aciv1.PortRange, bool) {
+	snatPortsAllocated := snatpolicy.Status.SnatPortsAllocated
+	var portRange aciv1.PortRange
+	portRange.Start = MIN_PORT
+	portRange.End = MAX_PORT
+	var currPortRange []aciv1.PortRange
+	currPortRange = append(currPortRange, portRange)
+	expandedsnatports := ExpandPortRanges(currPortRange, PORTPERNODES)
+	if _, ok := snatPortsAllocated[snatIp]; ok {
+		nodePortRange := snatPortsAllocated[snatIp]
+		if len(nodePortRange) == 0 {
+			return expandedsnatports[0], false
+		}
+		for _, val := range nodePortRange {
+			if val.NodeName == NodeName {
+				return val.PortRange, true
+			}
+		}
+		m := map[int]int{}
+		for _, Val1 := range snatPortsAllocated[snatIp] {
+			m[Val1.PortRange.Start] = Val1.PortRange.End
+		}
+		for i, Val2 := range expandedsnatports {
+			if _, ok := m[Val2.Start]; !ok {
+				log.Info("Created New Port Range for new NodeName ", "SnatGlobalInfo", expandedsnatports[i])
+				return expandedsnatports[i], false
+			}
+		}
+	}
+	return expandedsnatports[0], false
+}
