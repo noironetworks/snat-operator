@@ -143,6 +143,9 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create SnatGlobalInfo Object
+			if len(localips) == 0 {
+				return reconcile.Result{}, nil
+			}
 			snatPolicy, err := utils.GetSnatPolicyCR(r.client, localips[snatip][0])
 			if err != nil && errors.IsNotFound(err) {
 				log.Error(err, "not matching snatpolicy")
