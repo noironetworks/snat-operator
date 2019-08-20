@@ -31,8 +31,8 @@ func GetPodNameFromReoncileRequest(requestName string) (string, string, string) 
 		UtilLog.Info("Length should be 4", "input string:", requestName, "lengthGot", len(temp))
 		return "", "", ""
 	}
-	snatPolicyName, resName, resType := temp[1], temp[2], temp[3]
-	return resName, snatPolicyName, resType
+	name, resName, resType := temp[1], temp[2], temp[3]
+	return resName, name, resType
 }
 
 // Get nodeinfo object matching given name of the node
@@ -231,16 +231,16 @@ func UpdateSnatPolicyStatus(NodeName string, snatPolicyName string, snatIp strin
 			if val.NodeName == NodeName {
 				nodePortRange[i] = nodePortRange[len(nodePortRange)-1]
 				nodePortRange = nodePortRange[:len(nodePortRange)-1]
+				foundSnatPolicy.Status.SnatPortsAllocated[snatIp] = nodePortRange
+				err = c.Status().Update(context.TODO(), &foundSnatPolicy)
+				if err != nil {
+					log.Error(err, "Policy Status Update Failed")
+					return reconcile.Result{}, err
+				}
 				break
 			}
 		}
-		log.Info("Updated Node Port Range for santIP ############# ", "snatIP", nodePortRange)
-		foundSnatPolicy.Status.SnatPortsAllocated[snatIp] = nodePortRange
-		err = c.Status().Update(context.TODO(), &foundSnatPolicy)
-		if err != nil {
-			log.Error(err, "Policy Status Update Failed")
-			return reconcile.Result{}, err
-		}
+
 	}
 	return reconcile.Result{}, nil
 }
