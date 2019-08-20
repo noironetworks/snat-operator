@@ -58,7 +58,7 @@ func (h *handlePodsForPodsMapper) Map(obj handler.MapObject) []reconcile.Request
 	if !ok {
 		return nil
 	}
-	// MapperLog.Info("Inside pod map function", "Pod is:", pod.ObjectMeta.Name+"--"+pod.Spec.NodeName+"---"+pod.ObjectMeta.Namespace)
+	MapperLog.Info("Inside pod map function", "Pod is:", pod.ObjectMeta.Name+"--"+pod.Spec.NodeName+"---"+pod.ObjectMeta.Namespace)
 
 	// Get all the snatpolicies
 	snatPolicyList := &aciv1.SnatPolicyList{}
@@ -135,6 +135,7 @@ Loop:
 			if item.Spec.Selector.Namespace != pod.ObjectMeta.Namespace {
 				continue
 			}
+			// This case is for Services where SnatIP is Service IP
 			if len(item.Spec.SnatIp) == 0 {
 				// Handle it for Services.
 				SerivesList := &corev1.ServiceList{}
@@ -143,11 +144,13 @@ Loop:
 						Namespace: item.Spec.Selector.Namespace,
 					},
 					SerivesList)
-
 				if err == nil {
-					for _, service := range SerivesList.Items {
-						if reflect.DeepEqual(pod.ObjectMeta.Labels, service.Spec.Selector) {
-							if utils.MatchLabels(item.Spec.Selector.Labels, service.ObjectMeta.Labels) {
+					if len(item.Spec.Selector.Labels) == 0 {
+						for _, service := range SerivesList.Items {
+							if reflect.DeepEqual(pod.ObjectMeta.Labels, service.Spec.Selector) {
+								if len(service.Status.LoadBalancer.Ingress) == 0 {
+									break Loop
+								}
 								requests = append(requests, reconcile.Request{
 									NamespacedName: types.NamespacedName{
 										Namespace: pod.ObjectMeta.Namespace,
@@ -156,12 +159,43 @@ Loop:
 								})
 								break Loop
 							}
+
+						}
+					} else {
+						for _, service := range SerivesList.Items {
+							if reflect.DeepEqual(pod.ObjectMeta.Labels, service.Spec.Selector) {
+								if utils.MatchLabels(item.Spec.Selector.Labels, service.ObjectMeta.Labels) {
+									if len(service.Status.LoadBalancer.Ingress) == 0 {
+										break Loop
+									}
+									requests = append(requests, reconcile.Request{
+										NamespacedName: types.NamespacedName{
+											Namespace: pod.ObjectMeta.Namespace,
+											Name:      "snat-policyforservicepod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + service.Status.LoadBalancer.Ingress[0].IP,
+										},
+									})
+									break Loop
+								}
+							}
 						}
 					}
 				}
-				return requests
+				continue
 			}
-
+			// This case if for no labels and policy applied on only namespace
+			if len(item.Spec.Selector.Labels) == 0 {
+				if item.Spec.Selector.Namespace == pod.ObjectMeta.Namespace {
+					MapperLog.Info("Pod Matching for", "NameSpace:", item.Spec.Selector.Namespace)
+					requests = append(requests, reconcile.Request{
+						NamespacedName: types.NamespacedName{
+							Namespace: pod.ObjectMeta.Namespace,
+							Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "namepsace",
+						},
+					})
+					break Loop
+				}
+			}
+			//These Cases will be matched with labels
 			if utils.MatchLabels(item.Spec.Selector.Labels, pod.ObjectMeta.Labels) {
 				MapperLog.Info("Snat Polcies Info Obj", "Matches Pod Lables###", pod.ObjectMeta.Labels)
 				requests = append(requests, reconcile.Request{
