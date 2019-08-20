@@ -2,6 +2,7 @@ package snatlocalinfo
 
 import (
 	"context"
+	"os"
 	"reflect"
 
 	"github.com/noironetworks/snat-operator/cmd/manager/utils"
@@ -107,12 +108,21 @@ func FilterPodsPerSnatPolicy(c client.Client, snatPolicyList *aciv1.SnatPolicyLi
 
 Loop:
 	for _, item := range snatPolicyList.Items {
-
-		if false {
+		if reflect.DeepEqual(item.Spec.Selector, aciv1.PodSelector{}) {
 			// Need to check here how to handle this.
 			//item.Spec.Selector == aciv1.SnatPolicy.Spec.Selector{} {
-			MapperLog.Info("Cluster Scoped", "Needs special handling", item.Spec.SnatIp)
+			MapperLog.Info("Cluster Scoped", "for snatIP", item.Spec.SnatIp)
+			if !pod.Spec.HostNetwork {
+				requests = append(requests, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Namespace: pod.ObjectMeta.Namespace,
+						Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "cluster",
+					},
+				})
+				break Loop
+			}
 		} else {
+
 			// Now need to match pod with correct snatPolicy item
 			// According to priority:
 			// 1: Labels of pod should match exactly with labels of podSelector
@@ -121,6 +131,7 @@ Loop:
 			// right now namespace approach is implemented.
 
 			// This case is for Services
+
 			if item.Spec.Selector.Namespace != pod.ObjectMeta.Namespace {
 				continue
 			}
@@ -165,7 +176,7 @@ Loop:
 			replicaset := &appsv1.ReplicaSet{}
 			for _, rs := range pod.OwnerReferences {
 				if rs.Kind == "ReplicaSet" && rs.Name != "" {
-					err := c.Get(context.TODO(), types.NamespacedName{Name: rs.Name}, replicaset)
+					err := c.Get(context.TODO(), types.NamespacedName{Namespace: pod.ObjectMeta.Namespace, Name: rs.Name}, replicaset)
 					if err != nil {
 						//MapperLog.Error(err, "Replication get  Failed")
 					}
@@ -183,7 +194,7 @@ Loop:
 			if depname != "" {
 				deployment := &appsv1.Deployment{}
 				// Need to revisit this code how to set proper NameSpace here
-				err := c.Get(context.TODO(), types.NamespacedName{Namespace: "default", Name: depname}, deployment)
+				err := c.Get(context.TODO(), types.NamespacedName{Namespace: pod.ObjectMeta.Namespace, Name: depname}, deployment)
 				if err == nil {
 					MapperLog.Info("Snat Polcies Info Obj", "Labels for  Deployment OBJ ###", deployment.ObjectMeta.Labels)
 					if utils.MatchLabels(item.Spec.Selector.Labels, deployment.ObjectMeta.Labels) {
@@ -257,6 +268,22 @@ Loop:
 				MapperLog.Info("Obj", "No namespace found with: ", namespace)
 			} else if err != nil {
 				//MapperLog.Error(err, "namespace get error")
+			}
+		}
+		// Check For Any Stale present
+		if len(requests) == 0 && pod.GetObjectMeta().GetDeletionTimestamp() != nil {
+			MapperLog.Info("POD Deleted", "Check for any Stale entries there", pod)
+			localInfo, err := utils.GetLocalInfoCR(c, pod.Spec.NodeName, os.Getenv("ACI_SNAT_NAMESPACE"))
+			if err != nil {
+				log.Error(err, "localInfo error")
+			}
+			if _, ok := localInfo.Spec.LocalInfos[string(pod.ObjectMeta.UID)]; ok {
+				requests = append(requests, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Namespace: pod.ObjectMeta.Namespace,
+						Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "pod",
+					},
+				})
 			}
 		}
 	}
