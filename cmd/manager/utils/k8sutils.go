@@ -98,7 +98,7 @@ func GetSnatPolicyCR(c client.Client, policyName string) (aciv1.SnatPolicy, erro
 }
 
 // createSnatLocalInfoCR Creates a SnatLocalInfo CR
-func CreateLocalInfoCR(c client.Client, localInfoSpec aciv1.SnatLocalInfoSpec, nodeName string) (reconcile.Result, error) {
+func CreateLocalInfoCR(c client.Client, localInfoSpec aciv1.SnatLocalInfoSpec, nodeName string) (*aciv1.SnatLocalInfo, reconcile.Result, error) {
 
 	obj := &aciv1.SnatLocalInfo{
 		ObjectMeta: metav1.ObjectMeta{
@@ -110,10 +110,10 @@ func CreateLocalInfoCR(c client.Client, localInfoSpec aciv1.SnatLocalInfoSpec, n
 	err := c.Create(context.TODO(), obj)
 	if err != nil {
 		log.Error(err, "failed to create a snat locainfo cr")
-		return reconcile.Result{}, err
+		return obj, reconcile.Result{}, err
 	}
 	log.Info("Created localinfo object", "SnatLocalInfo", obj)
-	return reconcile.Result{}, nil
+	return obj, reconcile.Result{}, nil
 }
 
 // Delete SnatLocalInfoCR Creates a SnatLocalInfo CR
