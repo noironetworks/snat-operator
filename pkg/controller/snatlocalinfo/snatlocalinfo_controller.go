@@ -422,16 +422,16 @@ func (r *ReconcileSnatLocalInfo) snatPolicyUpdate(existingPods *corev1.PodList,
 	snatIps := make(map[string]string)
 	var localInfo aciv1.SnatLocalInfo
 	var err error
-	markdelete := false
+	poddeleted := false
 	for _, pod := range existingPods.Items {
 		if resType == "cluster" && pod.Spec.HostNetwork {
 			continue
 		}
 		if _, ok := localInfos[pod.Spec.NodeName]; !ok {
 			localInfo, err = utils.GetLocalInfoCR(r.client, pod.Spec.NodeName, os.Getenv("ACI_SNAT_NAMESPACE"))
-			if err != nil && errors.IsNotFound(err) {
+			if err != nil {
 				log.Error(err, "localInfo error")
-				return reconcile.Result{}, nil
+				return reconcile.Result{}, err
 			}
 		} else {
 			// This case will fall for delete case
@@ -441,7 +441,7 @@ func (r *ReconcileSnatLocalInfo) snatPolicyUpdate(existingPods *corev1.PodList,
 		snatIp := localInfo.Spec.LocalInfos[string(pod.ObjectMeta.UID)].SnatIp
 		if pod.GetObjectMeta().GetDeletionTimestamp() != nil {
 			if _, ok := localInfo.Spec.LocalInfos[string(pod.ObjectMeta.UID)]; ok {
-				markdelete = true
+				poddeleted = true
 				delete(localInfo.Spec.LocalInfos, string(pod.ObjectMeta.UID))
 				localInfos[nodeName] = localInfo
 				if len(localInfo.Spec.LocalInfos) == 0 {
@@ -474,22 +474,23 @@ func (r *ReconcileSnatLocalInfo) snatPolicyUpdate(existingPods *corev1.PodList,
 				log.Error(err, "Adding localInfo error")
 				return reconcile.Result{}, err
 			}
+			localInfos[nodeName] = localInfo
 		}
 	}
-	if markdelete || deleted {
-		for _, localinfo := range localInfos {
-			_, err := utils.UpdateLocalInfoCR(r.client, localinfo)
-			if err != nil {
-				log.Error(err, "updating localInfo error")
-				return reconcile.Result{}, err
-			}
-		}
+	if poddeleted || deleted {
 		for nodeName, snatIp := range snatIps {
 			_, err := utils.UpdateSnatPolicyStatus(nodeName, snatpolicy.ObjectMeta.Name, snatIp, r.client)
 			if err != nil {
 				log.Error(err, "Policy Status Update Failed")
 				return reconcile.Result{}, err
 			}
+		}
+	}
+	for _, localinfo := range localInfos {
+		_, err := utils.UpdateLocalInfoCR(r.client, localinfo)
+		if err != nil {
+			log.Error(err, "updating localInfo error")
+			return reconcile.Result{}, err
 		}
 	}
 	return reconcile.Result{}, nil
@@ -499,6 +500,7 @@ func (r *ReconcileSnatLocalInfo) addLocalInfo(snatlocalinfo *aciv1.SnatLocalInfo
 	policyname := snatpolicy.GetObjectMeta().GetName()
 	log.Info("localinfo", "Snat Policy NAME ### ", policyname)
 	var snatip string
+	var err error
 	if len(snatpolicy.Spec.SnatIp) == 0 {
 		snatip = snatIp
 	} else {
@@ -518,7 +520,12 @@ func (r *ReconcileSnatLocalInfo) addLocalInfo(snatlocalinfo *aciv1.SnatLocalInfo
 		tempLocalInfoSpec := aciv1.SnatLocalInfoSpec{
 			LocalInfos: tempMap,
 		}
-		return utils.CreateLocalInfoCR(r.client, tempLocalInfoSpec, pod.Spec.NodeName)
+		snatlocalinfo, _, err = utils.CreateLocalInfoCR(r.client, tempLocalInfoSpec, pod.Spec.NodeName)
+		if err != nil {
+			log.Error(err, "Create localInfo Failed")
+			return reconcile.Result{}, err
+		}
+
 	} else {
 		// LocaInfo CR is already present, Append localInfo object into Spec's map  and update Locainfo
 		scopechange := false
@@ -530,7 +537,6 @@ func (r *ReconcileSnatLocalInfo) addLocalInfo(snatlocalinfo *aciv1.SnatLocalInfo
 				LocalInfos: tempMap,
 			}
 			snatlocalinfo.Spec = tempLocalInfoSpec
-			return utils.UpdateLocalInfoCR(r.client, *snatlocalinfo)
 		} else {
 			if info, ok := snatlocalinfo.Spec.LocalInfos[string(pod.ObjectMeta.UID)]; ok {
 				if info.SnatScope == "deployment" && (resType == "pod" || resType == "service") {
@@ -555,7 +561,6 @@ func (r *ReconcileSnatLocalInfo) addLocalInfo(snatlocalinfo *aciv1.SnatLocalInfo
 
 		if scopechange {
 			snatlocalinfo.Spec.LocalInfos[string(pod.ObjectMeta.UID)] = tempLocalInfo
-			return utils.UpdateLocalInfoCR(r.client, *snatlocalinfo)
 		}
 	}
 	return reconcile.Result{}, nil
