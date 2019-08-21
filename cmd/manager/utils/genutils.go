@@ -55,6 +55,9 @@ func Remove(list []string, s string) []string {
 	return list
 }
 func MatchLabels(policylabels []aciv1.Label, reslabels map[string]string) bool {
+	if len(policylabels) == 0 {
+		return false
+	}
 	for _, label := range policylabels {
 		if _, ok := reslabels[label.Key]; ok {
 			if label.Value != reslabels[label.Key] {
