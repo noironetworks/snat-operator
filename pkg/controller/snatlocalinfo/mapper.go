@@ -349,9 +349,13 @@ func (h *handleDeployment) Map(obj handler.MapObject) []reconcile.Request {
 	if !ok {
 		return nil
 	}
+	slectorString, err := json.Marshal(deployment.Spec.Selector.MatchLabels)
+	if err != nil {
+		MapperLog.Error(err, "Failed to Marshal snatIp")
+	}
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Name: "snat-deployment$" + deployment.ObjectMeta.Namespace + "$" + deployment.ObjectMeta.Name + "$" + "deployment",
+			Name: "snat-deployment$" + deployment.ObjectMeta.Namespace + "$" + deployment.ObjectMeta.Name + "$" + string(slectorString),
 		},
 	})
 	return requests
@@ -407,13 +411,13 @@ func (h *handleService) Map(obj handler.MapObject) []reconcile.Request {
 	if !ok {
 		return nil
 	}
-	jsonString, err := json.Marshal(service.Spec.Selector)
+	slectorString, err := json.Marshal(service.Spec.Selector)
 	if err != nil {
 		MapperLog.Error(err, "Failed to Marshal snatIp")
 	}
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Name: "snat-service$" + service.ObjectMeta.Namespace + "$" + service.ObjectMeta.Name + "$" + string(jsonString),
+			Name: "snat-service$" + service.ObjectMeta.Namespace + "$" + service.ObjectMeta.Name + "$" + string(slectorString),
 		},
 	})
 	return requests
