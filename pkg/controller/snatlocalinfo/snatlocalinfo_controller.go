@@ -2,6 +2,7 @@ package snatlocalinfo
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"reflect"
 	"strings"
@@ -958,17 +959,19 @@ func (r *ReconcileSnatLocalInfo) handlePodForServiceEvent(request reconcile.Requ
 // This Function will be triggered upon changes to Service resource
 func (r *ReconcileSnatLocalInfo) handleServiceEvent(request reconcile.Request) (reconcile.Result, error) {
 	// revisit this code t write separate API for GetPodNameFromReoncileRequest to fix the names
-	servicename, namespace, _ := utils.GetPodNameFromReoncileRequest(request.Name)
+	servicename, namespace, slectorstring := utils.GetPodNameFromReoncileRequest(request.Name)
 	log.Info("handleServiceEvent", "name", servicename)
 	service := &corev1.Service{}
 	matches := false
 	var snatPolicyName string
+	var snatip string
 	nmsmatch := false
 	servicedeleted := false
+	selector := make(map[string]string)
 	err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: namespace, Name: servicename}, service)
 	if err != nil && errors.IsNotFound(err) {
-		log.Error(err, "no matching Service")
-		return reconcile.Result{}, nil
+		servicedeleted = true
+		log.Info("handleServiceEvent", "Service deleted", service)
 	} else if err != nil {
 		return reconcile.Result{}, nil
 	}
@@ -981,33 +984,51 @@ func (r *ReconcileSnatLocalInfo) handleServiceEvent(request reconcile.Request) (
 	if err := r.client.List(context.TODO(), &client.ListOptions{Namespace: ""}, snatPolicyList); err != nil {
 		return reconcile.Result{}, nil
 	}
-	for _, item := range snatPolicyList.Items {
-		if item.Spec.Selector.Namespace == service.ObjectMeta.Namespace {
-			nmsmatch = true
-			if utils.MatchLabels(item.Spec.Selector.Labels, service.ObjectMeta.Labels) {
-				log.Info("handleServiceEvent", "Labels Matches", item.Spec.Selector.Labels)
-				matches = true
-				snatPolicyName = item.ObjectMeta.Name
-				break
+	if servicedeleted {
+		err = json.Unmarshal([]byte(slectorstring), &selector)
+		if err != nil {
+			log.Error(err, "Marshling string Failed")
+			return reconcile.Result{}, nil
+		}
+	} else {
+		selector = service.Spec.Selector
+		for _, item := range snatPolicyList.Items {
+			if item.Spec.Selector.Namespace == service.ObjectMeta.Namespace {
+				nmsmatch = true
+				if utils.MatchLabels(item.Spec.Selector.Labels, service.ObjectMeta.Labels) {
+					log.Info("handleServiceEvent", "Labels Matches", item.Spec.Selector.Labels)
+					matches = true
+					snatPolicyName = item.ObjectMeta.Name
+					break
+				}
 			}
 		}
+		if nmsmatch == false {
+			return reconcile.Result{}, nil
+		}
 	}
-	if nmsmatch == false {
-		return reconcile.Result{}, nil
-	}
+	log.Info("handleServiceEvent:", "Selector###", selector)
 	Pods := &corev1.PodList{}
-	r.client.List(context.TODO(),
+	err = r.client.List(context.TODO(),
 		&client.ListOptions{
-			Namespace:     service.ObjectMeta.Namespace,
-			LabelSelector: labels.SelectorFromSet(service.Spec.Selector),
+			Namespace:     namespace,
+			LabelSelector: labels.SelectorFromSet(selector),
 		},
 		Pods)
-	if len(service.Status.LoadBalancer.Ingress) == 0 {
-		log.Info("No external Loadbalance IP for ", "Service: ", service)
+	if err != nil {
+		log.Error(err, "Listing Pods Failed")
 		return reconcile.Result{}, nil
 	}
-	snatip := service.Status.LoadBalancer.Ingress[0].IP
+	if len(Pods.Items) == 0 {
+		log.Info("handleServiceEvent:", "length Zero###", Pods)
+		return reconcile.Result{}, nil
+	}
 	if matches == true {
+		if len(service.Status.LoadBalancer.Ingress) == 0 {
+			log.Info("No external Loadbalance IP for ", "Service: ", service)
+			return reconcile.Result{}, nil
+		}
+		snatip = service.Status.LoadBalancer.Ingress[0].IP
 		snatPolicy, err := utils.GetSnatPolicyCR(r.client, snatPolicyName)
 		if err != nil && errors.IsNotFound(err) {
 			log.Error(err, "not matching snatpolicy")
