@@ -2,6 +2,7 @@ package snatlocalinfo
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"reflect"
 
@@ -406,12 +407,13 @@ func (h *handleService) Map(obj handler.MapObject) []reconcile.Request {
 	if !ok {
 		return nil
 	}
-	if len(service.Status.LoadBalancer.Ingress) == 0 {
-		return nil
+	jsonString, err := json.Marshal(service.Spec.Selector)
+	if err != nil {
+		MapperLog.Error(err, "Failed to Marshal snatIp")
 	}
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Name: "snat-service$" + service.ObjectMeta.Namespace + "$" + service.ObjectMeta.Name + "$" + service.Status.LoadBalancer.Ingress[0].IP,
+			Name: "snat-service$" + service.ObjectMeta.Namespace + "$" + service.ObjectMeta.Name + "$" + string(jsonString),
 		},
 	})
 	return requests
