@@ -570,50 +570,65 @@ func (r *ReconcileSnatLocalInfo) addLocalInfo(snatlocalinfo *aciv1.SnatLocalInfo
 
 func (r *ReconcileSnatLocalInfo) handleDeploymentEvent(request reconcile.Request) (reconcile.Result, error) {
 	// revisit this code t write separate API for GetPodNameFromReoncileRequest to fix the names
-	depName, namespace, resType := utils.GetPodNameFromReoncileRequest(request.Name)
+	depName, namespace, slectorstring := utils.GetPodNameFromReoncileRequest(request.Name)
 	dep := &appsv1.Deployment{}
 	matches := false
 	var snatPolicyName string
 	nmsmatch := false
+	deploymentdeleted := false
+	selector := make(map[string]string)
 	err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: namespace, Name: depName}, dep)
 	if err != nil && errors.IsNotFound(err) {
-		log.Error(err, "no matching deployment")
-		return reconcile.Result{}, nil
+		log.Info("handleDeploymentEvent", "deployment not found", depName)
+		deploymentdeleted = true
 	} else if err != nil {
 		return reconcile.Result{}, err
 	}
 	// Deployment delete cleanup handled as Pod Delete
 	if dep.GetObjectMeta().GetDeletionTimestamp() != nil {
 		log.Info("handleDeploymentEvent", "deployment deleted", dep)
-		return reconcile.Result{}, nil
+		deploymentdeleted = true
 	}
 	snatPolicyList := &aciv1.SnatPolicyList{}
 	if err := r.client.List(context.TODO(), &client.ListOptions{Namespace: ""}, snatPolicyList); err != nil {
 		return reconcile.Result{}, nil
 	}
-	for _, item := range snatPolicyList.Items {
-		if item.Spec.Selector.Namespace == namespace {
-			nmsmatch = true
-			if utils.MatchLabels(item.Spec.Selector.Labels, dep.ObjectMeta.Labels) {
-				log.Info("handleDeploymentEvent", "Labels Matches", item.Spec.Selector.Labels)
-				matches = true
-				snatPolicyName = item.ObjectMeta.Name
-				break
+
+	if deploymentdeleted {
+		err = json.Unmarshal([]byte(slectorstring), &selector)
+		if err != nil {
+			log.Error(err, "Marshling string Failed")
+			return reconcile.Result{}, nil
+		}
+	} else {
+		selector = dep.Spec.Selector.MatchLabels
+		for _, item := range snatPolicyList.Items {
+			if item.Spec.Selector.Namespace == namespace {
+				nmsmatch = true
+				if utils.MatchLabels(item.Spec.Selector.Labels, dep.ObjectMeta.Labels) {
+					log.Info("handleDeploymentEvent", "Labels Matches", item.Spec.Selector.Labels)
+					matches = true
+					snatPolicyName = item.ObjectMeta.Name
+					break
+				}
 			}
 		}
-	}
-	if nmsmatch == false {
-		return reconcile.Result{}, nil
+		if nmsmatch == false {
+			return reconcile.Result{}, nil
+		}
 	}
 	Pods := &corev1.PodList{}
-	r.client.List(context.TODO(),
+	err = r.client.List(context.TODO(),
 		&client.ListOptions{
-			Namespace:     dep.ObjectMeta.Namespace,
-			LabelSelector: labels.SelectorFromSet(dep.Spec.Selector.MatchLabels),
+			Namespace:     namespace,
+			LabelSelector: labels.SelectorFromSet(selector),
 		},
 		Pods)
-
-	_, err = r.updatePods(Pods, matches, snatPolicyName, snatPolicyList, resType)
+	if err != nil {
+		log.Error(err, "Pods list failed for deployment")
+		return reconcile.Result{}, err
+	}
+	_, err = r.updatePods(Pods, matches, snatPolicyName, snatPolicyList, "deployment")
 
 	if err != nil {
 		return reconcile.Result{}, err
@@ -627,42 +642,49 @@ func (r *ReconcileSnatLocalInfo) handleNameSpaceEvent(request reconcile.Request)
 	matches := false
 	var snatPolicyName string
 	nmsmatch := false
+	namespacedeleted := false
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: namespaceName}, namespace)
 	if err != nil && errors.IsNotFound(err) {
-		log.Error(err, "not matching namespace")
-		return reconcile.Result{}, nil
+		log.Info("handleNameSpaceEvent", "namespace not found", namespaceName)
+		namespacedeleted = true
 	} else if err != nil {
 		return reconcile.Result{}, err
 	}
 	// namespace delete cleanup handled as Pod Delete
 	if namespace.GetDeletionTimestamp() != nil {
 		log.Info("handleNameSpaceEvent", "namespace deleted", namespace)
-		return reconcile.Result{}, nil
+		namespacedeleted = true
 	}
 	snatPolicyList := &aciv1.SnatPolicyList{}
 	if err := r.client.List(context.TODO(), &client.ListOptions{Namespace: ""}, snatPolicyList); err != nil {
 		return reconcile.Result{}, nil
 	}
-	for _, item := range snatPolicyList.Items {
-		if item.Spec.Selector.Namespace == namespaceName {
-			nmsmatch = true
-			if utils.MatchLabels(item.Spec.Selector.Labels, namespace.ObjectMeta.Labels) {
-				log.Info("handleNameSpaceEvent", "Labels Matches", item.Spec.Selector.Labels)
-				matches = true
-				snatPolicyName = item.ObjectMeta.Name
-				break
+	if !namespacedeleted {
+		for _, item := range snatPolicyList.Items {
+			if item.Spec.Selector.Namespace == namespaceName {
+				nmsmatch = true
+				if utils.MatchLabels(item.Spec.Selector.Labels, namespace.ObjectMeta.Labels) {
+					log.Info("handleNameSpaceEvent", "Labels Matches", item.Spec.Selector.Labels)
+					matches = true
+					snatPolicyName = item.ObjectMeta.Name
+					break
+				}
 			}
 		}
-	}
-	if nmsmatch == false {
-		return reconcile.Result{}, nil
+		if nmsmatch == false {
+			return reconcile.Result{}, nil
+		}
 	}
 	Pods := &corev1.PodList{}
-	r.client.List(context.TODO(),
+	err = r.client.List(context.TODO(),
 		&client.ListOptions{
 			Namespace: namespaceName,
 		},
 		Pods)
+	if err != nil {
+		log.Error(err, "Pods list failed for namespace")
+		return reconcile.Result{}, err
+	}
 	_, err = r.updatePods(Pods, matches, snatPolicyName, snatPolicyList, resType)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -727,7 +749,6 @@ func (r *ReconcileSnatLocalInfo) updatePods(Pods *corev1.PodList, matches bool, 
 	if len(Pods.Items) == 0 {
 		return reconcile.Result{}, nil
 	}
-
 	if matches {
 		snatPolicy, err := utils.GetSnatPolicyCR(r.client, snatPolicyName)
 		if err != nil && errors.IsNotFound(err) {
