@@ -44,6 +44,14 @@ type handleNamespace struct {
 	predicates []predicate.Predicate
 }
 
+const (
+	POD        = "pod"
+	SERVICE    = "service"
+	DEPLOYMENT = "deployment"
+	NAMESPACE  = "namespace"
+	CLUSTER    = "cluster"
+)
+
 /*
 type handleDeploymentConfig struct {
 	client     client.Client
@@ -106,9 +114,12 @@ Map or not, based on CR spec of SnatPolicy from the list
 */
 func FilterPodsPerSnatPolicy(c client.Client, snatPolicyList *aciv1.SnatPolicyList, pod *corev1.Pod) []reconcile.Request {
 	var requests []reconcile.Request
-
+	var resType string
 Loop:
 	for _, item := range snatPolicyList.Items {
+		if item.GetDeletionTimestamp() != nil {
+			continue
+		}
 		if reflect.DeepEqual(item.Spec.Selector, aciv1.PodSelector{}) {
 			// Need to check here how to handle this.
 			//item.Spec.Selector == aciv1.SnatPolicy.Spec.Selector{} {
@@ -117,10 +128,12 @@ Loop:
 				requests = append(requests, reconcile.Request{
 					NamespacedName: types.NamespacedName{
 						Namespace: pod.ObjectMeta.Namespace,
-						Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "cluster",
+						Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + CLUSTER,
 					},
 				})
-				break Loop
+				if resType == "" {
+					resType = CLUSTER
+				}
 			}
 		} else {
 
@@ -150,7 +163,7 @@ Loop:
 						for _, service := range SerivesList.Items {
 							if reflect.DeepEqual(pod.ObjectMeta.Labels, service.Spec.Selector) {
 								if len(service.Status.LoadBalancer.Ingress) == 0 {
-									break Loop
+									continue
 								}
 								requests = append(requests, reconcile.Request{
 									NamespacedName: types.NamespacedName{
@@ -158,7 +171,9 @@ Loop:
 										Name:      "snat-policyforservicepod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + service.Status.LoadBalancer.Ingress[0].IP,
 									},
 								})
-								break Loop
+								if resType != POD {
+									resType = service.Status.LoadBalancer.Ingress[0].IP
+								}
 							}
 
 						}
@@ -167,7 +182,7 @@ Loop:
 							if reflect.DeepEqual(pod.ObjectMeta.Labels, service.Spec.Selector) {
 								if utils.MatchLabels(item.Spec.Selector.Labels, service.ObjectMeta.Labels) {
 									if len(service.Status.LoadBalancer.Ingress) == 0 {
-										break Loop
+										continue
 									}
 									requests = append(requests, reconcile.Request{
 										NamespacedName: types.NamespacedName{
@@ -175,7 +190,10 @@ Loop:
 											Name:      "snat-policyforservicepod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + service.Status.LoadBalancer.Ingress[0].IP,
 										},
 									})
-									break Loop
+									if resType != POD {
+										resType = service.Status.LoadBalancer.Ingress[0].IP
+									}
+									//break Loop
 								}
 							}
 						}
@@ -190,10 +208,13 @@ Loop:
 					requests = append(requests, reconcile.Request{
 						NamespacedName: types.NamespacedName{
 							Namespace: pod.ObjectMeta.Namespace,
-							Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "namepsace",
+							Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + NAMESPACE,
 						},
 					})
-					break Loop
+					if resType == CLUSTER || resType == "" {
+						resType = NAMESPACE
+					}
+					continue
 				}
 			}
 			//These Cases will be matched with labels
@@ -202,9 +223,10 @@ Loop:
 				requests = append(requests, reconcile.Request{
 					NamespacedName: types.NamespacedName{
 						Namespace: pod.ObjectMeta.Namespace,
-						Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "pod",
+						Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + POD,
 					},
 				})
+				resType = "pod"
 				break Loop
 			}
 
@@ -236,10 +258,13 @@ Loop:
 						requests = append(requests, reconcile.Request{
 							NamespacedName: types.NamespacedName{
 								Namespace: pod.ObjectMeta.Namespace,
-								Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "deployment",
+								Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + DEPLOYMENT,
 							},
 						})
-						break Loop
+						if resType == CLUSTER || resType == NAMESPACE || resType == "" {
+							resType = DEPLOYMENT
+						}
+						continue
 					}
 				} else if err != nil && errors.IsNotFound(err) {
 					MapperLog.Info("Obj", "No deployment found with: ", depname)
@@ -250,7 +275,7 @@ Loop:
 			rc := &corev1.ReplicationController{}
 			for _, rs := range pod.OwnerReferences {
 				if rs.Kind == "ReplicationController" && rs.Name != "" {
-					err := c.Get(context.TODO(), types.NamespacedName{Name: rs.Name}, rc)
+					err := c.Get(context.TODO(), types.NamespacedName{Namespace: pod.ObjectMeta.Namespace, Name: rs.Name}, rc)
 					if err != nil {
 						//MapperLog.Error(err, "Replication get  Failed")
 					}
@@ -274,10 +299,13 @@ Loop:
 						requests = append(requests, reconcile.Request{
 							NamespacedName: types.NamespacedName{
 								Namespace: pod.ObjectMeta.Namespace,
-								Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "deployment",
+								Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + DEPLOYMENT,
 							},
 						})
-						break Loop
+						if resType == CLUSTER || resType == NAMESPACE || resType == "" {
+							resType = DEPLOYMENT
+						}
+						continue
 					}
 				} else if err != nil && errors.IsNotFound(err) {
 					MapperLog.Info("Obj", "No deploymentConfig found with: ", depconfname)
@@ -294,10 +322,13 @@ Loop:
 					requests = append(requests, reconcile.Request{
 						NamespacedName: types.NamespacedName{
 							Namespace: pod.ObjectMeta.Namespace,
-							Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "namepsace",
+							Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + NAMESPACE,
 						},
 					})
-					break Loop
+					if resType == CLUSTER || resType == "" {
+						resType = NAMESPACE
+					}
+					continue
 				}
 			} else if err != nil && errors.IsNotFound(err) {
 				MapperLog.Info("Obj", "No namespace found with: ", namespace)
@@ -316,13 +347,22 @@ Loop:
 				requests = append(requests, reconcile.Request{
 					NamespacedName: types.NamespacedName{
 						Namespace: pod.ObjectMeta.Namespace,
-						Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + "pod",
+						Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + POD,
 					},
 				})
+				resType = POD
 			}
 		}
 	}
-	return requests
+	var newrequests []reconcile.Request
+	for _, request := range requests {
+		_, _, res := utils.GetPodNameFromReoncileRequest(request.Name)
+		if resType == res {
+			newrequests = append(newrequests, request)
+			break
+		}
+	}
+	return newrequests
 }
 
 func HandleDeploymentForDeploymentMapper(client client.Client, predicates []predicate.Predicate) handler.Mapper {
@@ -394,7 +434,7 @@ func (h *handleNamespace) Map(obj handler.MapObject) []reconcile.Request {
 	}
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Name: "snat-namespace$" + "labelchange" + "$" + namespace.ObjectMeta.Name + "$" + "namespace",
+			Name: "snat-namespace$" + "labelchange" + "$" + namespace.ObjectMeta.Name + "$" + NAMESPACE,
 		},
 	})
 	return requests
