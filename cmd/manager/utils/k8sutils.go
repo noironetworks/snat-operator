@@ -9,6 +9,7 @@ import (
 
 	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 	"github.com/prometheus/common/log"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -275,4 +276,61 @@ func GetPortRangeForServiceIP(NodeName string, snatpolicy *aciv1.SnatPolicy, sna
 		}
 	}
 	return expandedsnatports[0], false
+}
+
+// Check target labels matches any snatpolicy labels
+func CheckMatchesLabletoPolicy(snatPolicyList *aciv1.SnatPolicyList, labels map[string]string, namespace string) (string, bool) {
+	matches := false
+	var snatPolicyName string
+	for _, item := range snatPolicyList.Items {
+		if MatchLabels(item.Spec.Selector.Labels, labels) {
+			log.Info("Matches", "Labels ", item.Spec.Selector.Labels)
+			matches = true
+			if item.Spec.Selector.Namespace != "" && item.Spec.Selector.Namespace != namespace {
+				matches = false
+				continue
+			}
+			snatPolicyName = item.ObjectMeta.Name
+			break
+		}
+	}
+	return snatPolicyName, matches
+}
+
+// Allocate ip port range
+func AllocateIpPortRange(portInuse map[string][]aciv1.NodePortRange, podList *corev1.PodList,
+	snatPolicy *aciv1.SnatPolicy) bool {
+	updated := false
+	for _, pod := range podList.Items {
+		if pod.Spec.HostNetwork {
+			continue
+		}
+		snatip, portrange, exists := GetIPPortRangeForPod(pod.Spec.NodeName, snatPolicy)
+		if exists == false && pod.GetObjectMeta().GetDeletionTimestamp() == nil {
+			var nodePortRnage aciv1.NodePortRange
+			nodePortRnage.NodeName = pod.Spec.NodeName
+			nodePortRnage.PortRange = portrange
+			portInuse[snatip] = append(portInuse[snatip], nodePortRnage)
+			updated = true
+		}
+	}
+	return updated
+}
+
+// Allocate ip port range for services
+func AllocateIpPortRangeforservice(portInuse map[string][]aciv1.NodePortRange, podList *corev1.PodList,
+	snatPolicy *aciv1.SnatPolicy, snatip string) bool {
+	updated := false
+	for _, pod := range podList.Items {
+		portrange, exists := GetPortRangeForServiceIP(pod.Spec.NodeName, snatPolicy, snatip)
+		if exists == false && pod.GetObjectMeta().GetDeletionTimestamp() == nil {
+			var nodePortRnage aciv1.NodePortRange
+			nodePortRnage.NodeName = pod.Spec.NodeName
+			nodePortRnage.PortRange = portrange
+
+			portInuse[snatip] = append(portInuse[snatip], nodePortRnage)
+			updated = true
+		}
+	}
+	return updated
 }
