@@ -3,7 +3,6 @@ package snatlocalinfo
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"reflect"
 
 	"github.com/noironetworks/snat-operator/cmd/manager/utils"
@@ -146,9 +145,6 @@ Loop:
 
 			// This case is for Services
 
-			if item.Spec.Selector.Namespace != pod.ObjectMeta.Namespace {
-				continue
-			}
 			// This case is for Services where SnatIP is Service IP
 			if len(item.Spec.SnatIp) == 0 {
 				// Handle it for Services.
@@ -226,7 +222,7 @@ Loop:
 						Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + POD,
 					},
 				})
-				resType = "pod"
+				resType = POD
 				break Loop
 			}
 
@@ -334,23 +330,6 @@ Loop:
 				MapperLog.Info("Obj", "No namespace found with: ", namespace)
 			} else if err != nil {
 				//MapperLog.Error(err, "namespace get error")
-			}
-		}
-		// Check For Any Stale present
-		if len(requests) == 0 && pod.GetObjectMeta().GetDeletionTimestamp() != nil {
-			MapperLog.Info("POD Deleted", "Check for any Stale entries there", pod)
-			localInfo, err := utils.GetLocalInfoCR(c, pod.Spec.NodeName, os.Getenv("ACI_SNAT_NAMESPACE"))
-			if err != nil {
-				log.Error(err, "localInfo error")
-			}
-			if _, ok := localInfo.Spec.LocalInfos[string(pod.ObjectMeta.UID)]; ok {
-				requests = append(requests, reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Namespace: pod.ObjectMeta.Namespace,
-						Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + POD,
-					},
-				})
-				resType = POD
 			}
 		}
 	}
