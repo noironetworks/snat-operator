@@ -507,9 +507,9 @@ func (r *ReconcileSnatLocalInfo) addLocalInfo(snatlocalinfo *aciv1.SnatLocalInfo
 	var snatip string
 	var err error
 	if len(snatpolicy.Spec.SnatIp) == 0 {
-		snatip, _, _ = utils.GetIPPortRangeForPod(pod.Spec.NodeName, snatpolicy)
-	} else {
 		snatip = snatIp
+	} else {
+		snatip, _, _ = utils.GetIPPortRangeForPod(pod.Spec.NodeName, snatpolicy)
 	}
 	tempLocalInfo := aciv1.LocalInfo{
 		PodName:        pod.GetObjectMeta().GetName(),
@@ -853,7 +853,6 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForServices(snatPolicy *aciv1.S
 	}
 	return reconcile.Result{}, nil
 }
-// This Function will be triggred changes to the POD resource under Any Service
 func (r *ReconcileSnatLocalInfo) handlePodForServiceEvent(request reconcile.Request) (reconcile.Result, error) {
 	// Podname: name of the pod for which loop was triggered
 	// PolicyName: name of the snatPolicy for respective pod
@@ -933,7 +932,6 @@ func (r *ReconcileSnatLocalInfo) handlePodForServiceEvent(request reconcile.Requ
 	}
 	return reconcile.Result{}, nil
 }
-// This Function will be triggered upon changes to Service resource
 func (r *ReconcileSnatLocalInfo) handleServiceEvent(request reconcile.Request) (reconcile.Result, error) {
 	// revisit this code t write separate API for GetPodNameFromReoncileRequest to fix the names
 	servicename, namespace, slectorstring := utils.GetPodNameFromReoncileRequest(request.Name)
