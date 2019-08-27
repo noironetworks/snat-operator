@@ -301,12 +301,14 @@ func CheckMatchesLabletoPolicy(snatPolicyList *aciv1.SnatPolicyList, labels map[
 func AllocateIpPortRange(portInuse map[string][]aciv1.NodePortRange, podList *corev1.PodList,
 	snatPolicy *aciv1.SnatPolicy) bool {
 	updated := false
+	emptyportrange := aciv1.PortRange{}
 	for _, pod := range podList.Items {
 		if pod.Spec.HostNetwork {
 			continue
 		}
 		snatip, portrange, exists := GetIPPortRangeForPod(pod.Spec.NodeName, snatPolicy)
-		if exists == false && pod.GetObjectMeta().GetDeletionTimestamp() == nil {
+		if exists == false && pod.GetObjectMeta().GetDeletionTimestamp() == nil &&
+			portrange != emptyportrange {
 			var nodePortRnage aciv1.NodePortRange
 			nodePortRnage.NodeName = pod.Spec.NodeName
 			nodePortRnage.PortRange = portrange
