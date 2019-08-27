@@ -9,6 +9,7 @@ import (
 
 	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 	appsv2 "github.com/openshift/api/apps/v1"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -82,6 +83,7 @@ func HandlePodsForPodsMapper(client client.Client, predicates []predicate.Predic
 	return &handlePodsForPodsMapper{client, predicates}
 }
 func (h *handleSnatPoliciesMapper) Map(obj handler.MapObject) []reconcile.Request {
+	var requests []reconcile.Request
 	MapperLog.Info("Snat Polcies Info Obj", "mapper handling first ###", obj.Object)
 	if obj.Object == nil {
 		return nil
@@ -92,13 +94,29 @@ func (h *handleSnatPoliciesMapper) Map(obj handler.MapObject) []reconcile.Reques
 	if !ok {
 		return nil
 	}
-
-	var requests []reconcile.Request
-	requests = append(requests, reconcile.Request{
-		NamespacedName: types.NamespacedName{
-			Name: "snat-policy$" + snatpolicy.ObjectMeta.Name + "$" + "created" + "$" + "new",
-		},
-	})
+	snatPolicynew, err := utils.GetSnatPolicyCR(h.client, snatpolicy.ObjectMeta.Name)
+	if err != nil && errors.IsNotFound(err) {
+		return nil
+	}
+	// if polciy Spec is not equal means policy is updated
+	if reflect.DeepEqual(snatpolicy.Spec, snatPolicynew.Spec) {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name: "snat-policy$" + snatpolicy.ObjectMeta.Name + "$" + "created" + "$" + "new",
+			},
+		})
+	} else {
+		PolicyString, err := json.Marshal(snatpolicy)
+		if err != nil {
+			MapperLog.Error(err, "Failed to Marshal snatIp")
+		}
+		MapperLog.Info("OldObj", "Object is Updated: ", snatpolicy)
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name: "snat-policy$" + snatpolicy.ObjectMeta.Name + "$" + "deleted" + "$" + string(PolicyString),
+			},
+		})
+	}
 	return requests
 }
 
@@ -397,8 +415,7 @@ func (h *handleDeploymentConfig) Map(obj handler.MapObject) []reconcile.Request 
 		},
 	})
 	return requests
-}
-*/
+}*/
 
 func (h *handleNamespace) Map(obj handler.MapObject) []reconcile.Request {
 	var requests []reconcile.Request
