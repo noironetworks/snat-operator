@@ -336,3 +336,10 @@ func AllocateIpPortRangeforservice(portInuse map[string][]aciv1.NodePortRange, p
 	}
 	return updated
 }
+
+// This Fuction is to create policy Status
+func CreatePolicyStatus(portInuse map[string][]aciv1.NodePortRange, snatIp string, snatPolicy *aciv1.SnatPolicy) {
+	var nodePortRnage aciv1.NodePortRange
+	portInuse[snatIp] = append(portInuse[snatIp], nodePortRnage)
+	snatPolicy.Status.SnatPortsAllocated = portInuse
+}
