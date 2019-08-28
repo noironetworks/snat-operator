@@ -8,7 +8,7 @@ import (
 	"github.com/noironetworks/snat-operator/cmd/manager/utils"
 
 	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
-	appsv2 "github.com/openshift/api/apps/v1"
+	openv1 "github.com/openshift/api/apps/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -52,11 +52,10 @@ const (
 	CLUSTER    = "cluster"
 )
 
-/*
 type handleDeploymentConfig struct {
 	client     client.Client
 	predicates []predicate.Predicate
-}*/
+}
 
 func (h *handlePodsForPodsMapper) Map(obj handler.MapObject) []reconcile.Request {
 	if obj.Object == nil {
@@ -305,7 +304,7 @@ Loop:
 				}
 			}
 			if depconfname != "" {
-				deploymentconfig := &appsv2.DeploymentConfig{}
+				deploymentconfig := &openv1.DeploymentConfig{}
 				err := c.Get(context.TODO(), types.NamespacedName{Namespace: "default", Name: depconfname}, deploymentconfig)
 				if err == nil {
 					MapperLog.Info("Snat Polcies Info Obj", "Labels for  DeploymentConf OBJ ###", deploymentconfig.ObjectMeta.Labels)
@@ -369,10 +368,9 @@ func HandleNameSpaceForNameSpaceMapper(client client.Client, predicates []predic
 	return &handleNamespace{client, predicates}
 }
 
-/*
 func HandleDeploymentConfigForDeploymentMapper(client client.Client, predicates []predicate.Predicate) handler.Mapper {
 	return &handleDeploymentConfig{client, predicates}
-}*/
+}
 func HandleServicesForServiceMapper(client client.Client, predicates []predicate.Predicate) handler.Mapper {
 	return &handleService{client, predicates}
 }
@@ -398,24 +396,27 @@ func (h *handleDeployment) Map(obj handler.MapObject) []reconcile.Request {
 	return requests
 }
 
-/*
 func (h *handleDeploymentConfig) Map(obj handler.MapObject) []reconcile.Request {
 	MapperLog.Info("DeploymentConfig  Info Obj", "mapper handling first ###", obj.Object)
 	var requests []reconcile.Request
 	if obj.Object == nil {
 		return nil
 	}
-	deployment, ok := obj.Object.(*appsv2.DeploymentConfig)
+	deployment, ok := obj.Object.(*openv1.DeploymentConfig)
 	if !ok {
 		return nil
 	}
+	slectorString, err := json.Marshal(deployment.Spec.Selector)
+	if err != nil {
+		MapperLog.Error(err, "Failed to Marshal snatIp")
+	}
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Name: "snat-deploymentconfig$" + deployment.ObjectMeta.Namespace + "$" + deployment.ObjectMeta.Name + "$" + "deployment",
+			Name: "snat-deploymentconfig$" + deployment.ObjectMeta.Namespace + "$" + deployment.ObjectMeta.Name + "$" + string(slectorString),
 		},
 	})
 	return requests
-}*/
+}
 
 func (h *handleNamespace) Map(obj handler.MapObject) []reconcile.Request {
 	var requests []reconcile.Request
