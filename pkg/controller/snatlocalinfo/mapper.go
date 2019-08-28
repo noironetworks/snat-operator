@@ -133,7 +133,7 @@ func FilterPodsPerSnatPolicy(c client.Client, snatPolicyList *aciv1.SnatPolicyLi
 	var resType string
 Loop:
 	for _, item := range snatPolicyList.Items {
-		if item.GetDeletionTimestamp() != nil {
+		if item.GetDeletionTimestamp() != nil || item.Status.State != aciv1.Ready {
 			continue
 		}
 		if reflect.DeepEqual(item.Spec.Selector, aciv1.PodSelector{}) {

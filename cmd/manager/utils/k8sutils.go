@@ -74,7 +74,7 @@ func GetLocalInfoCR(c client.Client, nodeName, namespace string) (aciv1.SnatLoca
 	foundLocalIfo := &aciv1.SnatLocalInfo{}
 	err := c.Get(context.TODO(), types.NamespacedName{Name: nodeName, Namespace: namespace}, foundLocalIfo)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("LocalIfo not present ", "foundLocalIfo:", nodeName)
+		log.Info("LocalInfo not present ", "foundLocalInfo:", nodeName)
 		return aciv1.SnatLocalInfo{}, nil
 	} else if err != nil {
 		return aciv1.SnatLocalInfo{}, err
@@ -283,6 +283,9 @@ func CheckMatchesLabletoPolicy(snatPolicyList *aciv1.SnatPolicyList, labels map[
 	matches := false
 	var snatPolicyName string
 	for _, item := range snatPolicyList.Items {
+		if item.Status.State != aciv1.Ready {
+			continue
+		}
 		if MatchLabels(item.Spec.Selector.Labels, labels) {
 			log.Info("Matches", "Labels ", item.Spec.Selector.Labels)
 			matches = true
