@@ -60,13 +60,8 @@ type SnatPolicyList struct {
 }
 
 type PodSelector struct {
-	Labels    []Label `json:"labels,omitempty"`
-	Namespace string  `json:"namespace,omitempty"`
-}
-
-type Label struct {
-	Key   string `json:"key,omitempty"`
-	Value string `json:"value,omitempty"`
+	Labels    map[string]string `json:"labels,omitempty"`
+	Namespace string            `json:"namespace,omitempty"`
 }
 type NodePortRange struct {
 	NodeName  string    `json:"nodename,omitempty"`

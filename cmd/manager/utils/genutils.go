@@ -54,13 +54,13 @@ func Remove(list []string, s string) []string {
 	}
 	return list
 }
-func MatchLabels(policylabels []aciv1.Label, reslabels map[string]string) bool {
+func MatchLabels(policylabels map[string]string, reslabels map[string]string) bool {
 	if len(policylabels) == 0 {
 		return false
 	}
-	for _, label := range policylabels {
-		if _, ok := reslabels[label.Key]; ok {
-			if label.Value != reslabels[label.Key] {
+	for key, value := range policylabels {
+		if _, ok := reslabels[key]; ok {
+			if value != reslabels[key] {
 				return false
 			}
 		} else {

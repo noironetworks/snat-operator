@@ -3,7 +3,7 @@ package utils
 import (
 	"context"
 	"net"
-	"reflect"
+
 	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -75,9 +75,9 @@ func (v *Validator) ValidateSnatIP(cr *aciv1.SnatPolicy, c client.Client) {
 
 					// check if labels are repeated
 					item_labels := item.Spec.Selector.Labels
-					for _, crLabel := range cr_labels {
-						for _, iLabel := range item_labels {
-							if reflect.DeepEqual(crLabel, iLabel) {
+					for key, crLabel := range cr_labels {
+						if _, ok := item_labels[key]; ok {
+							if crLabel == item_labels[key] {
 								UtilLog.Info("Label already exists")
 								v.Validated = false
 								return
@@ -94,7 +94,7 @@ func (v *Validator) ValidateSnatIP(cr *aciv1.SnatPolicy, c client.Client) {
 				ip_temp := net.ParseIP(ip)
 				if ip_temp != nil && ip_temp.To4() != nil {
 					ip = ip + "/32"
-				} else if ip_temp != nil && ip_temp.To16() != nil  {
+				} else if ip_temp != nil && ip_temp.To16() != nil {
 					ip = ip + "/128"
 				} else {
 					v.Validated = false

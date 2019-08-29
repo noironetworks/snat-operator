@@ -6,6 +6,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+
 	"github.com/noironetworks/snat-operator/cmd/manager/utils"
 	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 	openv1 "github.com/openshift/api/apps/v1"
@@ -291,12 +292,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyEvent(request reconcile.Request
 		return reconcile.Result{}, nil
 	}
 	// Check before applying the order  pod > dep > ns
-	ls := make(map[string]string)
-
-	for _, label := range snatPolicy.Spec.Selector.Labels {
-		ls[label.Key] = label.Value
-	}
-
+	ls := snatPolicy.Spec.Selector.Labels
 	// list all Pods belong to the label
 	selector := labels.SelectorFromSet(labels.Set(ls))
 	existingPods := &corev1.PodList{}
@@ -762,18 +758,12 @@ func (r *ReconcileSnatLocalInfo) updatePods(Pods *corev1.PodList, matches bool, 
 		}
 		updated := false
 		updated = utils.AllocateIpPortRange(portinuse, Pods, &snatPolicy)
-		log.Info("Port Range Updated: ", "List of Ports InUse: ", portinuse)
 		if updated {
+			log.Info("Port Range Updated: ", "List of Ports InUse: ", portinuse)
 			err = r.client.Status().Update(context.TODO(), &snatPolicy)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
-		}
-		snactPolicyCheck, err := utils.GetSnatPolicyCR(r.client, snatPolicyName)
-		if !reflect.DeepEqual(snactPolicyCheck.Status.SnatPortsAllocated, portinuse) {
-			result := reconcile.Result{}
-			result.Requeue = true
-			return result, nil
 		}
 		_, err = r.snatPolicyUpdate(Pods, &snatPolicy, resType, false, "")
 		if err != nil {
@@ -781,8 +771,8 @@ func (r *ReconcileSnatLocalInfo) updatePods(Pods *corev1.PodList, matches bool, 
 		}
 	} else {
 		for _, item := range snatPolicyList.Items {
-			 if item.Status.State != aciv1.Ready {
-				continue;
+			if item.Status.State != aciv1.Ready {
+				continue
 			}
 			snatPolicy, err := utils.GetSnatPolicyCR(r.client, item.ObjectMeta.Name)
 			if err != nil && errors.IsNotFound(err) {
@@ -808,10 +798,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForServices(snatPolicy *aciv1.S
 	}
 	var err error
 	// Check before applying the order  pod > dep > ns
-	ls := make(map[string]string)
-	for _, label := range snatPolicy.Spec.Selector.Labels {
-		ls[label.Key] = label.Value
-	}
+	ls := snatPolicy.Spec.Selector.Labels
 	// list all Pods belong to the label
 	selector := labels.SelectorFromSet(labels.Set(ls))
 	SerivesList := &corev1.ServiceList{}
@@ -1052,9 +1039,9 @@ func (r *ReconcileSnatLocalInfo) handleServiceEvent(request reconcile.Request) (
 
 	} else {
 		for _, item := range snatPolicyList.Items {
-			 if item.Status.State != aciv1.Ready {
-                                continue;
-                        }
+			if item.Status.State != aciv1.Ready {
+				continue
+			}
 			snatPolicy, err := utils.GetSnatPolicyCR(r.client, item.ObjectMeta.Name)
 			if err != nil && errors.IsNotFound(err) {
 				log.Error(err, "not matching snatpolicy")
@@ -1111,9 +1098,9 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForCluster(snatPolicy *aciv1.Sn
 }
 
 func (r *ReconcileSnatLocalInfo) handleSnatPolicyForNameSpace(snatPolicy *aciv1.SnatPolicy, status string) (reconcile.Result, error) {
-	 if snatPolicy.Status.State != aciv1.Ready {
-                return reconcile.Result{}, nil
-        }
+	if snatPolicy.Status.State != aciv1.Ready {
+		return reconcile.Result{}, nil
+	}
 	nameSpacePods := &corev1.PodList{}
 	isSnatPolicyDeleted := snatPolicy.GetDeletionTimestamp() != nil
 	// SnatPolicy is updated so delete the old Object
