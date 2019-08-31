@@ -7,8 +7,8 @@ import (
 type PolicyState string
 
 const (
-	Ready      PolicyState = "Ready"
-	Failed     PolicyState = "Failed"
+	Ready  PolicyState = "Ready"
+	Failed PolicyState = "Failed"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -29,12 +29,13 @@ type SnatPolicySpec struct {
 
 // SnatPolicyStatus defines the observed state of SnatPolicy
 // +k8s:openapi-gen=true
+// +genclient:nonNamespaced
 type SnatPolicyStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file7
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
 	SnatPortsAllocated map[string][]NodePortRange `json:"snatPortsAllocated,omitempty"`
-	State              PolicyState `json:"state"`
+	State              PolicyState                `json:"state"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

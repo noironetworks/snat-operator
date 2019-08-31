@@ -87,7 +87,7 @@ func GetLocalInfoCR(c client.Client, nodeName, namespace string) (aciv1.SnatLoca
 func GetSnatPolicyCR(c client.Client, policyName string) (aciv1.SnatPolicy, error) {
 
 	foundSnatPolicy := &aciv1.SnatPolicy{}
-	err := c.Get(context.TODO(), types.NamespacedName{Name: policyName, Namespace: os.Getenv("ACI_SNAT_NAMESPACE")}, foundSnatPolicy)
+	err := c.Get(context.TODO(), types.NamespacedName{Name: policyName, Namespace: os.Getenv("WATCH_NAMESPACE")}, foundSnatPolicy)
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("SnatPolicy not present", "foundSnatPolicy:", policyName)
 		return aciv1.SnatPolicy{}, err
