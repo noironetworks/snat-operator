@@ -193,18 +193,18 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 	} else {
 		// update snatGlobalInfo object
 		// GlobalInfo CR is already present, Append GlobalInfo object into Spec's map  and update Globalinfo
-		var globalInfos []aciv1.GlobalInfo
-		if globalInfo.Spec.GlobalInfos[instance.ObjectMeta.Name] != nil {
-			globalInfos = append(globalInfos, globalInfo.Spec.GlobalInfos[instance.ObjectMeta.Name]...)
-		}
 		update := false
+		globalInfos := globalInfo.Spec.GlobalInfos[instance.ObjectMeta.Name]
 		// check if local info for ip deleted then update the Global Info
-		for i, v := range globalInfos {
-			if len(localips[v.SnatIp]) == 0 {
-				globalInfos[i] = globalInfos[len(globalInfos)-1]
-				globalInfos = globalInfos[:len(globalInfos)-1]
+		ginfolen := len(globalInfos)
+		deletedcount := 0
+		for i := 0; i < ginfolen; i++ {
+			j := i - deletedcount
+			if len(localips[globalInfos[j].SnatIp]) == 0 {
+				log.Info("Update Global info CR for Deleted LOCAL CR #####", "Info Obj deleted", globalInfos[j])
+				globalInfos = append(globalInfos[:j], globalInfos[j+1:]...)
 				update = true
-				log.Info("Update Global GR for Deleted LOCAL CR #####", "Creating new one", globalInfos)
+				deletedcount++
 			}
 		}
 		// Check for any addition in local Info
@@ -216,16 +216,21 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 				}
 			}
 			if found == false {
-				snatPolicy, err := utils.GetSnatPolicyCR(r.client, localips[snatip][0])
-				if err != nil && errors.IsNotFound(err) {
-					log.Error(err, "not matching snatpolicy")
+				if len(localips[snatIp]) == 0 {
 					return reconcile.Result{}, nil
+				}
+				snatPolicy, err := utils.GetSnatPolicyCR(r.client, localips[snatIp][0])
+				if snatPolicy.GetDeletionTimestamp() != nil {
+					continue
+				}
+				if err != nil && errors.IsNotFound(err) {
+					continue
 				} else if err != nil {
 					return reconcile.Result{}, err
 				}
 				var portrange aciv1.PortRange
 				if len(snatPolicy.Spec.SnatIp) == 0 {
-					portrange, _ = utils.GetPortRangeForServiceIP(instance.ObjectMeta.Name, &snatPolicy, snatip)
+					portrange, _ = utils.GetPortRangeForServiceIP(instance.ObjectMeta.Name, &snatPolicy, snatIp)
 				} else {
 					_, portrange, _ = utils.GetIPPortRangeForPod(instance.ObjectMeta.Name, &snatPolicy)
 				}
@@ -245,6 +250,7 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 				update = true
 			}
 		}
+
 		if update {
 			log.Info("Update for LOCAL CR is Received", "calling Global CR Update", globalInfo)
 			if len(globalInfos) == 0 {

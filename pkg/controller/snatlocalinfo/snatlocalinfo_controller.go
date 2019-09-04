@@ -345,6 +345,10 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyEvent(request reconcile.Request
 	}
 	mameSpacePods := []corev1.PodList{}
 	for _, name := range nameSpaceList.Items {
+		if snatPolicy.Spec.Selector.Namespace != "" &&
+			snatPolicy.Spec.Selector.Namespace != name.ObjectMeta.Name {
+			continue
+		}
 		Pods := &corev1.PodList{}
 		log.Info("Matching lables for", "namespace: ", name.ObjectMeta.Name)
 		r.client.List(context.TODO(),
@@ -484,22 +488,21 @@ func (r *ReconcileSnatLocalInfo) snatPolicyUpdate(existingPods *corev1.PodList,
 				return reconcile.Result{}, err
 			}
 		}
-	} else if deleted {
-		// in the update Old Object's policy status needs to be cleared
-		var curpolicy aciv1.SnatPolicy
-		curpolicy, err = utils.GetSnatPolicyCR(r.client, snatpolicy.ObjectMeta.Name)
-		if err == nil && curpolicy.GetDeletionTimestamp() == nil {
-			curpolicy.Status.SnatPortsAllocated = nil
-			err = r.client.Status().Update(context.TODO(), &curpolicy)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-		}
 	}
 	for _, localinfo := range localInfos {
 		_, err := utils.UpdateLocalInfoCR(r.client, localinfo)
 		if err != nil {
 			log.Error(err, "updating localInfo error")
+			return reconcile.Result{}, err
+		}
+	}
+	if deleted {
+		// in the update Old Object's policy status needs to be cleared
+		var curpolicy aciv1.SnatPolicy
+		curpolicy, err = utils.GetSnatPolicyCR(r.client, snatpolicy.ObjectMeta.Name)
+		curpolicy.Status.SnatPortsAllocated = nil
+		err = r.client.Status().Update(context.TODO(), &curpolicy)
+		if err != nil {
 			return reconcile.Result{}, err
 		}
 	}
@@ -816,6 +819,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForServices(snatPolicy *aciv1.S
 			},
 			SerivesList)
 	}
+	log.Info("Matching lables for", "ServiceList: ", SerivesList)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -828,7 +832,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForServices(snatPolicy *aciv1.S
 		Pods := &corev1.PodList{}
 		r.client.List(context.TODO(),
 			&client.ListOptions{
-				Namespace:     service.ObjectMeta.Namespace,
+				Namespace:     snatPolicy.Spec.Selector.Namespace,
 				LabelSelector: labels.SelectorFromSet(service.Spec.Selector),
 			},
 			Pods)

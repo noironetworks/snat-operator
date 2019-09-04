@@ -213,6 +213,7 @@ func GetIPPortRangeForPod(NodeName string, snatpolicy *aciv1.SnatPolicy) (string
 				}
 			}
 		}
+		return v, expandedsnatports[0], false
 	}
 	return "", aciv1.PortRange{}, false
 }

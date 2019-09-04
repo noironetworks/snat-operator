@@ -2,6 +2,7 @@ package snatpolicy
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/noironetworks/snat-operator/cmd/manager/utils"
@@ -20,6 +21,7 @@ import (
 const snatPolicyFinalizer = "finalizer.snatpolicy.aci.snat"
 
 var log = logf.Log.WithName("controller_snatpolicy")
+var errSnatPolicyObject = fmt.Errorf("Snat policy obj entries are not cleared")
 
 // Add creates a new SnatPolicy Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -123,12 +125,6 @@ func (r *ReconcileSnatPolicy) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 	}
-
-	// In case of update (deletion of subnets which are currently used by snatip)
-	if err := r.finalizeSnatPolicy(reqLogger, instance); err != nil {
-		return reconcile.Result{}, err
-	}
-
 	// If snatIP resource is using any of the IP in snatSubnet, then check that and send appropriate error
 	// return r.handleSnatSubnetUpdate(*instance)
 	return reconcile.Result{}, nil
@@ -150,5 +146,8 @@ func (r *ReconcileSnatPolicy) addFinalizer(m *aciv1.SnatPolicy) error {
 
 // Cleanup steps to be done when snatPolicy resource is getting deleted.
 func (r *ReconcileSnatPolicy) finalizeSnatPolicy(reqLogger logr.Logger, m *aciv1.SnatPolicy) error {
+	if len(m.Status.SnatPortsAllocated) != 0 {
+		return errSnatPolicyObject
+	}
 	return nil
 }
