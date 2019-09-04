@@ -152,6 +152,10 @@ Loop:
 				}
 			}
 		} else {
+			// This case will come when namespace is specified in the policy
+			if item.Spec.Selector.Namespace != "" && item.Spec.Selector.Namespace != pod.ObjectMeta.Namespace {
+				continue
+			}
 
 			// Now need to match pod with correct snatPolicy item
 			// According to priority:
