@@ -20,9 +20,8 @@ type SnatPolicySpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
-	SnatIp    []string    `json:"snatIp"`
-	Selector  PodSelector `json:"selector,omitempty"`
-	PortRange []PortRange `json:"portRange, omitempty"`
+	SnatIp   []string    `json:"snatIp"`
+	Selector PodSelector `json:"selector,omitempty"`
 	// +kubebuilder:validation:Enum=tcp,udp,icmp
 	Protocols []string `json:"protocols,omitempty"`
 }
