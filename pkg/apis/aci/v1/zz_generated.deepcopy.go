@@ -479,11 +479,6 @@ func (in *SnatPolicySpec) DeepCopyInto(out *SnatPolicySpec) {
 		copy(*out, *in)
 	}
 	in.Selector.DeepCopyInto(&out.Selector)
-	if in.PortRange != nil {
-		in, out := &in.PortRange, &out.PortRange
-		*out = make([]PortRange, len(*in))
-		copy(*out, *in)
-	}
 	if in.Protocols != nil {
 		in, out := &in.Protocols, &out.Protocols
 		*out = make([]string, len(*in))

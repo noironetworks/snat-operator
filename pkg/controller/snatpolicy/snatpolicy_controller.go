@@ -89,6 +89,7 @@ func (r *ReconcileSnatPolicy) Reconcile(request reconcile.Request) (reconcile.Re
 			// Run finalization logic for snatPolicyFinalizer. If the
 			// finalization logic fails, don't remove the finalizer so
 			// that we can retry during the next reconciliation.
+
 			if err := r.finalizeSnatPolicy(reqLogger, instance); err != nil {
 				return reconcile.Result{}, err
 			}
@@ -147,7 +148,11 @@ func (r *ReconcileSnatPolicy) addFinalizer(m *aciv1.SnatPolicy) error {
 // Cleanup steps to be done when snatPolicy resource is getting deleted.
 func (r *ReconcileSnatPolicy) finalizeSnatPolicy(reqLogger logr.Logger, m *aciv1.SnatPolicy) error {
 	if len(m.Status.SnatPortsAllocated) != 0 {
-		return errSnatPolicyObject
+		for _, portslist := range m.Status.SnatPortsAllocated {
+			if len(portslist) > 0 {
+				return errSnatPolicyObject
+			}
+		}
 	}
 	return nil
 }

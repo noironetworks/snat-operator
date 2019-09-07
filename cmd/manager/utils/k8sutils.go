@@ -217,34 +217,22 @@ func GetIPPortRangeForPod(NodeName string, snatpolicy *aciv1.SnatPolicy) (string
 	}
 	return "", aciv1.PortRange{}, false
 }
-func UpdateSnatPolicyStatus(NodeName string, snatPolicyName string, snatIp string, c client.Client) (reconcile.Result, error) {
-	foundSnatPolicy, err := GetSnatPolicyCR(c, snatPolicyName)
-	if err != nil {
-		log.Error(err, "not matching snatpolicy", snatPolicyName)
-		return reconcile.Result{}, nil
+func UpdateSnatPolicyStatus(NodeName string, snatpolicy *aciv1.SnatPolicy, snatIp string, c client.Client) bool {
+	if snatpolicy.GetDeletionTimestamp() != nil {
+		return false
 	}
-
-	if foundSnatPolicy.GetDeletionTimestamp() != nil {
-		return reconcile.Result{}, nil
-	}
-	if _, ok := foundSnatPolicy.Status.SnatPortsAllocated[snatIp]; ok {
-		nodePortRange := foundSnatPolicy.Status.SnatPortsAllocated[snatIp]
+	if _, ok := snatpolicy.Status.SnatPortsAllocated[snatIp]; ok {
+		nodePortRange := snatpolicy.Status.SnatPortsAllocated[snatIp]
 		for i, val := range nodePortRange {
-			if val.NodeName == NodeName {
+			if NodeName == val.NodeName {
 				nodePortRange[i] = nodePortRange[len(nodePortRange)-1]
 				nodePortRange = nodePortRange[:len(nodePortRange)-1]
-				foundSnatPolicy.Status.SnatPortsAllocated[snatIp] = nodePortRange
-				err = c.Status().Update(context.TODO(), &foundSnatPolicy)
-				if err != nil {
-					log.Error(err, "Policy Status Update Failed")
-					return reconcile.Result{}, err
-				}
-				break
+				snatpolicy.Status.SnatPortsAllocated[snatIp] = nodePortRange
+				return true
 			}
 		}
-
 	}
-	return reconcile.Result{}, nil
+	return false
 }
 
 func GetPortRangeForServiceIP(NodeName string, snatpolicy *aciv1.SnatPolicy, snatIp string) (aciv1.PortRange, bool) {
@@ -289,13 +277,15 @@ func CheckMatchesLabletoPolicy(snatPolicyList *aciv1.SnatPolicyList, labels map[
 		}
 		if MatchLabels(item.Spec.Selector.Labels, labels) {
 			log.Info("Matches", "Labels ", item.Spec.Selector.Labels)
-			matches = true
-			if item.Spec.Selector.Namespace != "" && item.Spec.Selector.Namespace != namespace {
-				matches = false
-				continue
+			if item.Spec.Selector.Namespace != "" && item.Spec.Selector.Namespace == namespace {
+				matches = true
+				snatPolicyName = item.ObjectMeta.Name
+				break
+			} else if item.Spec.Selector.Namespace == "" {
+				matches = true
+				snatPolicyName = item.ObjectMeta.Name
+				break
 			}
-			snatPolicyName = item.ObjectMeta.Name
-			break
 		}
 	}
 	return snatPolicyName, matches
@@ -333,17 +323,9 @@ func AllocateIpPortRangeforservice(portInuse map[string][]aciv1.NodePortRange, p
 			var nodePortRnage aciv1.NodePortRange
 			nodePortRnage.NodeName = pod.Spec.NodeName
 			nodePortRnage.PortRange = portrange
-
 			portInuse[snatip] = append(portInuse[snatip], nodePortRnage)
 			updated = true
 		}
 	}
 	return updated
-}
-
-// This Fuction is to create policy Status
-func CreatePolicyStatus(portInuse map[string][]aciv1.NodePortRange, snatIp string, snatPolicy *aciv1.SnatPolicy) {
-	var nodePortRnage aciv1.NodePortRange
-	portInuse[snatIp] = append(portInuse[snatIp], nodePortRnage)
-	snatPolicy.Status.SnatPortsAllocated = portInuse
 }
