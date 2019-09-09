@@ -234,7 +234,8 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 		if len(snatPolicy.Status.SnatPortsAllocated) != 0 {
 			portinuse = snatPolicy.Status.SnatPortsAllocated
 		}
-		snatip, portrange, exists := utils.GetIPPortRangeForPod(foundPod.Spec.NodeName, &snatPolicy)
+		snatip, portrange, exists :=
+			utils.GetIPPortRangeForPod(r.client, foundPod.Spec.NodeName, &snatPolicy)
 		if exists == false {
 			var nodePortRnage aciv1.NodePortRange
 			nodePortRnage.NodeName = foundPod.Spec.NodeName
@@ -256,6 +257,7 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 	}
 	return reconcile.Result{}, nil
 }
+
 func (r *ReconcileSnatLocalInfo) handleSnatPolicyEvent(request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Snat Policy Update Event ", "Snat Policy: ", request)
 	status, snatPolicyName, PolicyString := utils.GetPodNameFromReoncileRequest(request.Name)
@@ -378,13 +380,13 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyEvent(request reconcile.Request
 			snatPolicy.Status.SnatPortsAllocated = portinuse
 		}
 		updated := false
-		updated = utils.AllocateIpPortRange(portinuse, existingPods, &snatPolicy)
+		updated = utils.AllocateIpPortRange(r.client, portinuse, existingPods, &snatPolicy)
 		for _, podlist := range depPods {
-			if utils.AllocateIpPortRange(portinuse, &podlist, &snatPolicy) {
+			if utils.AllocateIpPortRange(r.client, portinuse, &podlist, &snatPolicy) {
 				updated = true
 			}
 		}
-		if utils.AllocateIpPortRange(portinuse, nameSpacePods, &snatPolicy) {
+		if utils.AllocateIpPortRange(r.client, portinuse, nameSpacePods, &snatPolicy) {
 			updated = true
 		}
 		if updated {
@@ -545,7 +547,7 @@ func (r *ReconcileSnatLocalInfo) addLocalInfo(snatlocalinfo *aciv1.SnatLocalInfo
 	if len(snatpolicy.Spec.SnatIp) == 0 {
 		snatip = snatIp
 	} else {
-		snatip, _, _ = utils.GetIPPortRangeForPod(pod.Spec.NodeName, snatpolicy)
+		snatip, _, _ = utils.GetIPPortRangeForPod(r.client, pod.Spec.NodeName, snatpolicy)
 	}
 	tempLocalInfo := aciv1.LocalInfo{
 		PodName:        pod.GetObjectMeta().GetName(),
@@ -785,7 +787,7 @@ func (r *ReconcileSnatLocalInfo) updatePods(Pods *corev1.PodList, matches bool, 
 			snatPolicy.Status.SnatPortsAllocated = portinuse
 		}
 		updated := false
-		updated = utils.AllocateIpPortRange(portinuse, Pods, &snatPolicy)
+		updated = utils.AllocateIpPortRange(r.client, portinuse, Pods, &snatPolicy)
 		if updated {
 			log.Info("Port Range Updated: ", "List of Ports InUse: ", portinuse)
 			err = r.client.Status().Update(context.TODO(), &snatPolicy)
@@ -873,7 +875,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForServices(snatPolicy *aciv1.S
 				} else {
 					snatPolicy.Status.SnatPortsAllocated = portinuse
 				}
-				if utils.AllocateIpPortRangeforservice(portinuse, Pods, snatPolicy, snatip) {
+				if utils.AllocateIpPortRangeforservice(r.client, portinuse, Pods, snatPolicy, snatip) {
 					snatPolicy.Status.SnatPortsAllocated = portinuse
 					log.Info("Port Range Updated: ", "List of Ports InUse: ", portinuse)
 					err = r.client.Status().Update(context.TODO(), snatPolicy)
@@ -951,7 +953,8 @@ func (r *ReconcileSnatLocalInfo) handlePodForServiceEvent(request reconcile.Requ
 		if len(snatPolicy.Status.SnatPortsAllocated) != 0 {
 			portinuse = snatPolicy.Status.SnatPortsAllocated
 		}
-		portrange, exists := utils.GetPortRangeForServiceIP(foundPod.Spec.NodeName, &snatPolicy, snatIp)
+		portrange, exists :=
+			utils.GetPortRangeForServiceIP(r.client, foundPod.Spec.NodeName, &snatPolicy, snatIp)
 		if exists == false {
 			var nodePortRnage aciv1.NodePortRange
 			nodePortRnage.NodeName = foundPod.Spec.NodeName
@@ -1066,7 +1069,7 @@ func (r *ReconcileSnatLocalInfo) handleServiceEvent(request reconcile.Request) (
 			snatPolicy.Status.SnatPortsAllocated = portinuse
 		}
 
-		if utils.AllocateIpPortRangeforservice(portinuse, Pods, &snatPolicy, snatip) {
+		if utils.AllocateIpPortRangeforservice(r.client, portinuse, Pods, &snatPolicy, snatip) {
 			snatPolicy.Status.SnatPortsAllocated = portinuse
 			log.Info("Port Range Updated: ", "List of Ports InUse: ", portinuse)
 			err = r.client.Status().Update(context.TODO(), &snatPolicy)
@@ -1128,7 +1131,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForCluster(snatPolicy *aciv1.Sn
 		} else {
 			snatPolicy.Status.SnatPortsAllocated = portinuse
 		}
-		if utils.AllocateIpPortRange(portinuse, Pods, snatPolicy) {
+		if utils.AllocateIpPortRange(r.client, portinuse, Pods, snatPolicy) {
 			snatPolicy.Status.SnatPortsAllocated = portinuse
 			log.Info("Port Range Updated: ", "List of Ports InUse: ", portinuse)
 			err = r.client.Status().Update(context.TODO(), snatPolicy)
@@ -1174,7 +1177,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForNameSpace(snatPolicy *aciv1.
 		} else {
 			snatPolicy.Status.SnatPortsAllocated = portinuse
 		}
-		if utils.AllocateIpPortRange(portinuse, nameSpacePods, snatPolicy) {
+		if utils.AllocateIpPortRange(r.client, portinuse, nameSpacePods, snatPolicy) {
 			snatPolicy.Status.SnatPortsAllocated = portinuse
 			log.Info("Port Range Updated: ", "List of Ports InUse: ", portinuse)
 			err = r.client.Status().Update(context.TODO(), snatPolicy)

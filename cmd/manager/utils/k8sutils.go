@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"strconv"
 
 	// nodeinfo "github.com/noironetworks/aci-containers/pkg/nodeinfo/apis/aci.nodeinfo/v1"
 
@@ -178,17 +179,41 @@ func UpdateGlobalInfoCR(c client.Client, globalInfo aciv1.SnatGlobalInfo) (recon
 	return reconcile.Result{}, nil
 }
 
+// Get portRange from snat-operator-config configMap 
+func getPortRangeFromConfigMap(c client.Client) (aciv1.PortRange, int) {
+        cMap := &corev1.ConfigMap{}
+        err := c.Get(context.Background(), client.ObjectKey{
+                Namespace: "aci-containers-system",
+                Name:      "snat-operator-config",
+                }, cMap)
+	var resultPortRange aciv1.PortRange
+	resultPortRange.Start = MIN_PORT
+	resultPortRange.End = MAX_PORT
+        if err != nil {
+                return resultPortRange, PORTPERNODES
+        }
+        data := cMap.Data
+        start, err1 := strconv.Atoi(data["start"])
+        end, err2 := strconv.Atoi(data["end"])
+        portsPerNode, err3 := strconv.Atoi(data["ports-per-node"])
+        if (err1 != nil || err2 != nil || err3 != nil ||
+                start < 5000 || end > 65000 || start > end || portsPerNode > end-start+1) {
+                return resultPortRange, PORTPERNODES
+        }
+	resultPortRange.Start = start
+	resultPortRange.End = end
+        return resultPortRange, portsPerNode
+}
+
 // Get IP and port for pod for which notification has come to reconcile loop
-func GetIPPortRangeForPod(NodeName string, snatpolicy *aciv1.SnatPolicy) (string, aciv1.PortRange, bool) {
+func GetIPPortRangeForPod (c client.Client, NodeName string, snatpolicy *aciv1.SnatPolicy) (string, aciv1.PortRange, bool) {
 	log.Info("Get Port Range For", "Node name: ", NodeName)
 	snatPortsAllocated := snatpolicy.Status.SnatPortsAllocated
 	snatIps := ExpandCIDRs(snatpolicy.Spec.SnatIp)
-	var portRange aciv1.PortRange
-	portRange.Start = MIN_PORT
-	portRange.End = MAX_PORT
+	portRange, portsPerNode := getPortRangeFromConfigMap(c)
 	var currPortRange []aciv1.PortRange
 	currPortRange = append(currPortRange, portRange)
-	expandedsnatports := ExpandPortRanges(currPortRange, PORTPERNODES)
+	expandedsnatports := ExpandPortRanges(currPortRange, portsPerNode)
 	if len(snatPortsAllocated) == 0 {
 		return snatIps[0], expandedsnatports[0], false
 	}
@@ -235,14 +260,12 @@ func UpdateSnatPolicyStatus(NodeName string, snatpolicy *aciv1.SnatPolicy, snatI
 	return false
 }
 
-func GetPortRangeForServiceIP(NodeName string, snatpolicy *aciv1.SnatPolicy, snatIp string) (aciv1.PortRange, bool) {
+func GetPortRangeForServiceIP(c client.Client, NodeName string, snatpolicy *aciv1.SnatPolicy, snatIp string) (aciv1.PortRange, bool) {
 	snatPortsAllocated := snatpolicy.Status.SnatPortsAllocated
-	var portRange aciv1.PortRange
-	portRange.Start = MIN_PORT
-	portRange.End = MAX_PORT
+	portRange, portsPerNode := getPortRangeFromConfigMap(c)
 	var currPortRange []aciv1.PortRange
 	currPortRange = append(currPortRange, portRange)
-	expandedsnatports := ExpandPortRanges(currPortRange, PORTPERNODES)
+	expandedsnatports := ExpandPortRanges(currPortRange, portsPerNode)
 	if _, ok := snatPortsAllocated[snatIp]; ok {
 		nodePortRange := snatPortsAllocated[snatIp]
 		if len(nodePortRange) == 0 {
@@ -292,15 +315,15 @@ func CheckMatchesLabletoPolicy(snatPolicyList *aciv1.SnatPolicyList, labels map[
 }
 
 // Allocate ip port range
-func AllocateIpPortRange(portInuse map[string][]aciv1.NodePortRange, podList *corev1.PodList,
-	snatPolicy *aciv1.SnatPolicy) bool {
+func AllocateIpPortRange(c client.Client, portInuse map[string][]aciv1.NodePortRange,
+	podList *corev1.PodList, snatPolicy *aciv1.SnatPolicy) bool {
 	updated := false
 	emptyportrange := aciv1.PortRange{}
 	for _, pod := range podList.Items {
 		if pod.Spec.HostNetwork {
 			continue
 		}
-		snatip, portrange, exists := GetIPPortRangeForPod(pod.Spec.NodeName, snatPolicy)
+		snatip, portrange, exists := GetIPPortRangeForPod(c, pod.Spec.NodeName, snatPolicy)
 		if exists == false && pod.GetObjectMeta().GetDeletionTimestamp() == nil &&
 			portrange != emptyportrange {
 			var nodePortRnage aciv1.NodePortRange
@@ -314,11 +337,11 @@ func AllocateIpPortRange(portInuse map[string][]aciv1.NodePortRange, podList *co
 }
 
 // Allocate ip port range for services
-func AllocateIpPortRangeforservice(portInuse map[string][]aciv1.NodePortRange, podList *corev1.PodList,
-	snatPolicy *aciv1.SnatPolicy, snatip string) bool {
+func AllocateIpPortRangeforservice(c client.Client, portInuse map[string][]aciv1.NodePortRange,
+	podList *corev1.PodList, snatPolicy *aciv1.SnatPolicy, snatip string) bool {
 	updated := false
 	for _, pod := range podList.Items {
-		portrange, exists := GetPortRangeForServiceIP(pod.Spec.NodeName, snatPolicy, snatip)
+		portrange, exists := GetPortRangeForServiceIP(c, pod.Spec.NodeName, snatPolicy, snatip)
 		if exists == false && pod.GetObjectMeta().GetDeletionTimestamp() == nil {
 			var nodePortRnage aciv1.NodePortRange
 			nodePortRnage.NodeName = pod.Spec.NodeName
