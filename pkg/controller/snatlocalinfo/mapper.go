@@ -99,6 +99,10 @@ func (h *handleSnatPoliciesMapper) Map(obj handler.MapObject) []reconcile.Reques
 	}
 	// if polciy Spec is not equal means policy is updated
 	if reflect.DeepEqual(snatpolicy.Spec, snatPolicynew.Spec) {
+		// check to block all the port status updates
+		if snatPolicynew.GetDeletionTimestamp() == nil && len(snatpolicy.Status.SnatPortsAllocated) != 0 {
+			return nil
+		}
 		requests = append(requests, reconcile.Request{
 			NamespacedName: types.NamespacedName{
 				Name: "snat-policy$" + snatpolicy.ObjectMeta.Name + "$" + "created" + "$" + "new",
@@ -178,7 +182,7 @@ Loop:
 				if err == nil {
 					if len(item.Spec.Selector.Labels) == 0 {
 						for _, service := range SerivesList.Items {
-							if reflect.DeepEqual(pod.ObjectMeta.Labels, service.Spec.Selector) {
+							if utils.MatchLabels(service.Spec.Selector, pod.ObjectMeta.Labels) {
 								if len(service.Status.LoadBalancer.Ingress) == 0 {
 									continue
 								}
@@ -196,7 +200,7 @@ Loop:
 						}
 					} else {
 						for _, service := range SerivesList.Items {
-							if reflect.DeepEqual(pod.ObjectMeta.Labels, service.Spec.Selector) {
+							if utils.MatchLabels(service.Spec.Selector, pod.ObjectMeta.Labels) {
 								if utils.MatchLabels(item.Spec.Selector.Labels, service.ObjectMeta.Labels) {
 									if len(service.Status.LoadBalancer.Ingress) == 0 {
 										continue

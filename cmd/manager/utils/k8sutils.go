@@ -263,6 +263,7 @@ func GetPortRangeForServiceIP(NodeName string, snatpolicy *aciv1.SnatPolicy, sna
 				return expandedsnatports[i], false
 			}
 		}
+		return aciv1.PortRange{}, false
 	}
 	return expandedsnatports[0], false
 }
