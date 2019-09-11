@@ -823,7 +823,7 @@ func (r *ReconcileSnatLocalInfo) updatePods(Pods *corev1.PodList, matches bool, 
 			if !resdeleted && len(snatPolicy.Spec.SnatIp) == 0 {
 				return reconcile.Result{}, nil
 			}
-			_, err = r.snatPolicyUpdate(Pods, &snatPolicy, resType, resdeleted, "")
+			_, err = r.snatPolicyUpdate(Pods, &snatPolicy, resType, true, "")
 			if err != nil {
 				return reconcile.Result{}, err
 			}
