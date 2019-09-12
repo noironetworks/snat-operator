@@ -385,12 +385,20 @@ func HandleServicesForServiceMapper(client client.Client, predicates []predicate
 func (h *handleDeployment) Map(obj handler.MapObject) []reconcile.Request {
 	MapperLog.Info("Deployment  Info Obj", "mapper handling first ###", obj.Object)
 	var requests []reconcile.Request
+	curdep := &appsv1.Deployment{}
 	if obj.Object == nil {
 		return nil
 	}
 	deployment, ok := obj.Object.(*appsv1.Deployment)
 	if !ok {
 		return nil
+	}
+	err := h.client.Get(context.TODO(), types.NamespacedName{Namespace: deployment.ObjectMeta.Namespace,
+		Name: deployment.ObjectMeta.Name}, curdep)
+	if err == nil {
+		if reflect.DeepEqual(deployment.ObjectMeta.Labels, curdep.ObjectMeta.Labels) {
+			return nil
+		}
 	}
 	slectorString, err := json.Marshal(deployment.Spec.Selector.MatchLabels)
 	if err != nil {
@@ -407,12 +415,20 @@ func (h *handleDeployment) Map(obj handler.MapObject) []reconcile.Request {
 func (h *handleDeploymentConfig) Map(obj handler.MapObject) []reconcile.Request {
 	MapperLog.Info("DeploymentConfig  Info Obj", "mapper handling first ###", obj.Object)
 	var requests []reconcile.Request
+	curdep := &openv1.DeploymentConfig{}
 	if obj.Object == nil {
 		return nil
 	}
 	deployment, ok := obj.Object.(*openv1.DeploymentConfig)
 	if !ok {
 		return nil
+	}
+	err := h.client.Get(context.TODO(), types.NamespacedName{Namespace: deployment.ObjectMeta.Namespace,
+		Name: deployment.ObjectMeta.Name}, curdep)
+	if err == nil {
+		if reflect.DeepEqual(deployment.ObjectMeta.Labels, curdep.ObjectMeta.Labels) {
+			return nil
+		}
 	}
 	slectorString, err := json.Marshal(deployment.Spec.Selector)
 	if err != nil {
@@ -428,14 +444,20 @@ func (h *handleDeploymentConfig) Map(obj handler.MapObject) []reconcile.Request 
 
 func (h *handleNamespace) Map(obj handler.MapObject) []reconcile.Request {
 	var requests []reconcile.Request
+	curnamespace := &corev1.Namespace{}
 	MapperLog.Info("NameSpace Info Obj", "mapper handling first ###", obj.Object)
 	if obj.Object == nil {
 		return nil
 	}
-
 	namespace, ok := obj.Object.(*corev1.Namespace)
 	if !ok {
 		return nil
+	}
+	err := h.client.Get(context.TODO(), types.NamespacedName{Name: namespace.ObjectMeta.Name}, curnamespace)
+	if err == nil && namespace.GetDeletionTimestamp() == nil {
+		if reflect.DeepEqual(namespace.ObjectMeta.Labels, curnamespace.ObjectMeta.Labels) {
+			return nil
+		}
 	}
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
@@ -451,7 +473,6 @@ func (h *handleService) Map(obj handler.MapObject) []reconcile.Request {
 	if obj.Object == nil {
 		return nil
 	}
-
 	service, ok := obj.Object.(*corev1.Service)
 	if !ok {
 		return nil
