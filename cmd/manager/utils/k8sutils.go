@@ -287,6 +287,11 @@ func CheckMatchesLabletoPolicy(snatPolicyList *aciv1.SnatPolicyList, labels map[
 				snatPolicyName = item.ObjectMeta.Name
 				break
 			}
+		} else if len(item.Spec.Selector.Labels) == 0 &&
+			item.Spec.Selector.Namespace != "" &&
+			item.Spec.Selector.Namespace == namespace {
+			matches = true
+			snatPolicyName = item.ObjectMeta.Name
 		}
 	}
 	return snatPolicyName, matches
