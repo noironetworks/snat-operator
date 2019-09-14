@@ -117,9 +117,6 @@ func (r *ReconcileSnatLocalInfo) Reconcile(request reconcile.Request) (reconcile
 	case strings.HasPrefix(request.Name, "snat-policyforpod"):
 		result, err := r.handlePodEvent(request)
 		return result, err
-	case strings.HasPrefix(request.Name, "snat-policyforservicepod"):
-		result, err := r.handlePodForServiceEvent(request)
-		return result, err
 	case strings.HasPrefix(request.Name, "snat-policy"):
 		result, err := r.handleSnatPolicyEvent(request)
 		return result, err
@@ -156,8 +153,8 @@ func (r *ReconcileSnatLocalInfo) Reconcile(request reconcile.Request) (reconcile
 func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reconcile.Result, error) {
 	// Podname: name of the pod for which loop was triggered
 	// PolicyName: name of the snatPolicy for respective pod
-	podName, snatPolicyName, resType := utils.GetPodNameFromReoncileRequest(request.Name)
-
+	podName, snatPolicyName, resType, snatIp := GetPodNameFromReoncileRequest(request.Name)
+	// This is to match the Service
 	// Query this pod using k8s client
 	foundPod := &corev1.Pod{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: podName, Namespace: request.Namespace}, foundPod)
@@ -185,9 +182,9 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 			nodeName := foundPod.Spec.NodeName
 			snatIp := localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)].SnatIp
 			delete(localInfo.Spec.LocalInfos, string(foundPod.ObjectMeta.UID))
-			log.Info("Local Info to be deleted: ", "Update Snat Policy Status###", len(localInfo.Spec.LocalInfos))
+			log.Info("Pod is getting deleted", "PodName:", request.Name)
 			if len(localInfo.Spec.LocalInfos) == 0 {
-				log.Info("Local Info to be deleted: ", "Update Snat Policy Status###", nodeName)
+				log.Info("Local Info is deleted: ", "Update Snat Policy Status###", nodeName)
 				if utils.UpdateSnatPolicyStatus(nodeName, &snatPolicy, snatIp, r.client) {
 					err = r.client.Status().Update(context.TODO(), &snatPolicy)
 					if err != nil {
@@ -202,12 +199,21 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 		}
 		return reconcile.Result{}, nil
 	} else if _, ok := localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)]; ok {
-		if resType == "pod" || localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)].SnatScope == "pod" {
+		if resType == POD || localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)].SnatScope == POD {
 			if utils.MatchLabels(snatPolicy.Spec.Selector.Labels, foundPod.ObjectMeta.Labels) == false {
+				log.Info("Pod label is deleted", "PodName:", request.Name)
 				nodeName := foundPod.Spec.NodeName
 				snatIp := localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)].SnatIp
 				delete(localInfo.Spec.LocalInfos, string(foundPod.ObjectMeta.UID))
-				if len(localInfo.Spec.LocalInfos) == 0 {
+				refpolicy := false
+				// check for  refrences for this any policy in localinfo
+				for _, local := range localInfo.Spec.LocalInfos {
+					if local.SnatPolicyName == snatPolicyName {
+						refpolicy = true
+					}
+				}
+				if !refpolicy {
+					log.Info("Local Info is deleted: ", "Update Snat Policy Status###", nodeName)
 					if utils.UpdateSnatPolicyStatus(nodeName, &snatPolicy, snatIp, r.client) {
 						err = r.client.Status().Update(context.TODO(), &snatPolicy)
 						if err != nil {
@@ -221,18 +227,26 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 				return utils.UpdateLocalInfoCR(r.client, localInfo)
 			}
 		}
-	} else if foundPod.Status.Phase == "Running" {
+	}
+	if foundPod.Status.Phase == "Running" {
 		portinuse := make(map[string][]aciv1.NodePortRange)
 		if len(snatPolicy.Status.SnatPortsAllocated) != 0 {
 			portinuse = snatPolicy.Status.SnatPortsAllocated
 		}
-		snatip, portrange, exists :=
-			utils.GetIPPortRangeForPod(r.client, foundPod.Spec.NodeName, &snatPolicy)
+		portrange := aciv1.PortRange{}
+		exists := false
+		if snatIp == "" {
+			snatIp, portrange, exists =
+				utils.GetIPPortRangeForPod(r.client, foundPod.Spec.NodeName, &snatPolicy)
+		} else {
+			portrange, exists =
+				utils.GetPortRangeForServiceIP(r.client, foundPod.Spec.NodeName, &snatPolicy, snatIp)
+		}
 		if exists == false {
 			var nodePortRnage aciv1.NodePortRange
 			nodePortRnage.NodeName = foundPod.Spec.NodeName
 			nodePortRnage.PortRange = portrange
-			portinuse[snatip] = append(portinuse[snatip], nodePortRnage)
+			portinuse[snatIp] = append(portinuse[snatIp], nodePortRnage)
 			snatPolicy.Status.SnatPortsAllocated = portinuse
 			log.Info("Port Range Updated: ", "List of Ports InUse: ", portinuse)
 			err = r.client.Status().Update(context.TODO(), &snatPolicy)
@@ -241,7 +255,7 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 			}
 		}
 		log.Info("POD found add it :", "Pod name", foundPod.ObjectMeta.Name)
-		_, updated, err1 := r.addLocalInfo(&localInfo, foundPod, &snatPolicy, resType, "")
+		_, updated, err1 := r.addLocalInfo(&localInfo, foundPod, &snatPolicy, resType, snatIp)
 		if err1 != nil {
 			log.Error(err, "Adding localInfo error")
 			return reconcile.Result{}, err
@@ -255,7 +269,7 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 
 func (r *ReconcileSnatLocalInfo) handleSnatPolicyEvent(request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Snat Policy Update Event ", "Snat Policy: ", request)
-	status, snatPolicyName, PolicyString := utils.GetPodNameFromReoncileRequest(request.Name)
+	status, snatPolicyName, PolicyString, _ := GetPodNameFromReoncileRequest(request.Name)
 	var snatPolicy aciv1.SnatPolicy
 	var err error
 	var isSnatPolicyDeleted bool
@@ -327,7 +341,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyEvent(request reconcile.Request
 	}
 	depPods := []corev1.PodList{}
 	for _, dep := range deploymentList.Items {
-		log.Info("Matching lables for", "Depolymet: ", dep)
+		log.Info("Matching lables for", "Depolymet: ", dep.ObjectMeta.Name)
 		Pods := &corev1.PodList{}
 		r.client.List(context.TODO(),
 			&client.ListOptions{
@@ -374,12 +388,15 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyEvent(request reconcile.Request
 			snatPolicy.Status.SnatPortsAllocated = portinuse
 		}
 		updated := false
+		// Allocate the IP Port ranges for Pods listed
 		updated = utils.AllocateIpPortRange(r.client, portinuse, existingPods, &snatPolicy)
+		// Allocate the IP Port ranges for deployment listed
 		for _, podlist := range depPods {
 			if utils.AllocateIpPortRange(r.client, portinuse, &podlist, &snatPolicy) {
 				updated = true
 			}
 		}
+		// Allocate the IP Port ranges for namespace listed
 		for _, podlist := range nameSpacePods {
 			if utils.AllocateIpPortRange(r.client, portinuse, &podlist, &snatPolicy) {
 				updated = true
@@ -398,21 +415,21 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyEvent(request reconcile.Request
 		}
 	}
 	if len(existingPods.Items) != 0 {
-		_, err = r.snatPolicyUpdate(existingPods, &snatPolicy, POD, isSnatPolicyDeleted, "")
+		_, err = r.snatPolicyUpdate(existingPods, &snatPolicy, POD, isSnatPolicyDeleted, "", false)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 	}
 
 	for _, podlist := range depPods {
-		_, err = r.snatPolicyUpdate(&podlist, &snatPolicy, DEPLOYMENT, isSnatPolicyDeleted, "")
+		_, err = r.snatPolicyUpdate(&podlist, &snatPolicy, DEPLOYMENT, isSnatPolicyDeleted, "", false)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 	}
 
 	for _, podlist := range nameSpacePods {
-		_, err = r.snatPolicyUpdate(&podlist, &snatPolicy, NAMESPACE, isSnatPolicyDeleted, "")
+		_, err = r.snatPolicyUpdate(&podlist, &snatPolicy, NAMESPACE, isSnatPolicyDeleted, "", false)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -421,7 +438,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyEvent(request reconcile.Request
 }
 
 func (r *ReconcileSnatLocalInfo) snatPolicyUpdate(existingPods *corev1.PodList,
-	snatpolicy *aciv1.SnatPolicy, resType string, deleted bool, snatip string) (reconcile.Result, error) {
+	snatpolicy *aciv1.SnatPolicy, resType string, deleted bool, snatip string, forcedel bool) (reconcile.Result, error) {
 	// caching the localinfo and snaip per node to update once
 	localInfos := make(map[string]aciv1.SnatLocalInfo)
 	snatIps := make(map[string]string)
@@ -438,9 +455,11 @@ func (r *ReconcileSnatLocalInfo) snatPolicyUpdate(existingPods *corev1.PodList,
 		log.Info("SnatPolicyList ", "Failed to List: ", snatPolicyList)
 	}
 	for _, pod := range existingPods.Items {
+		//Don't add snatip for host network pods
 		if resType == "cluster" && pod.Spec.HostNetwork {
 			continue
 		}
+		// This is required to sample first pod  in case if we need to enqueue for other policy
 		fristPod = pod
 		if _, ok := localInfos[pod.Spec.NodeName]; !ok {
 			localInfo, err = utils.GetLocalInfoCR(r.client, pod.Spec.NodeName, os.Getenv("ACI_SNAT_NAMESPACE"))
@@ -464,27 +483,36 @@ func (r *ReconcileSnatLocalInfo) snatPolicyUpdate(existingPods *corev1.PodList,
 				}
 			}
 		} else if deleted {
-			log.Info("Snat Policy Deleted: ", "Snat Policy", deleted)
+			log.Info("Snat Policy deleted/label removed: ", "Snat Policy", snatpolicy.ObjectMeta.Name)
 			if _, ok := localInfo.Spec.LocalInfos[string(pod.ObjectMeta.UID)]; ok {
 				inforesType := localInfo.Spec.LocalInfos[string(pod.ObjectMeta.UID)].SnatScope
-				if inforesType == POD && (resType != POD) {
-					continue
-				} else if inforesType == SERVICE && (resType != SERVICE) {
-					// policy is of type deployment or namespace based continue
-					// otherwise delete localinfo, as deployment or namespace might have been deleted.
-					if len(snatpolicy.Spec.SnatIp) != 0 {
+				poddeleted = forcedel
+				// forcedel will be set if any target gets deleted
+				if !forcedel {
+					if inforesType == POD && (resType != POD) {
+						continue
+					} else if inforesType == SERVICE &&
+						(resType == NAMESPACE || resType == CLUSTER || resType == DEPLOYMENT) {
+						continue
+					} else if inforesType == DEPLOYMENT && (resType == NAMESPACE || resType == CLUSTER) {
+						continue
+					} else if inforesType == NAMESPACE && resType == CLUSTER {
 						continue
 					}
-					poddeleted = true
-				} else if inforesType == DEPLOYMENT && (resType == NAMESPACE || resType == CLUSTER) {
-					continue
-				} else if inforesType == NAMESPACE && resType == CLUSTER {
-					continue
 				}
 				delete(localInfo.Spec.LocalInfos, string(pod.ObjectMeta.UID))
 				// This case is possible when some of the POD's are deleted marked in case of Deployment
 				localInfos[nodeName] = localInfo
-				if len(localInfo.Spec.LocalInfos) == 0 {
+				refpolicy := false
+				if !forcedel {
+					for _, local := range localInfo.Spec.LocalInfos {
+						if local.SnatPolicyName == snatpolicy.ObjectMeta.Name {
+							refpolicy = true
+						}
+					}
+				}
+				// if no reference to the policy found remove the snatIP
+				if !refpolicy {
 					snatIps[nodeName] = snatIp
 				}
 			}
@@ -506,6 +534,7 @@ func (r *ReconcileSnatLocalInfo) snatPolicyUpdate(existingPods *corev1.PodList,
 			return reconcile.Result{}, err
 		}
 	}
+
 	if deleted {
 		// in the update Old Object's policy status needs to be cleared
 		var curpolicy aciv1.SnatPolicy
@@ -513,9 +542,10 @@ func (r *ReconcileSnatLocalInfo) snatPolicyUpdate(existingPods *corev1.PodList,
 		update := false
 		// update the status to be nil for Policy delete and update case
 		if curpolicy.GetDeletionTimestamp() != nil || !reflect.DeepEqual(curpolicy.Spec, snatpolicy.Spec) {
+			log.Info("Update Status as it is modified: ", "Snat Policy", snatpolicy.ObjectMeta.Name)
 			curpolicy.Status.SnatPortsAllocated = nil
 			update = true
-		} else if resType == SERVICE {
+		} else if len(curpolicy.Spec.SnatIp) == 0 {
 			for _, snatIp := range snatIps {
 				// Service is bound to IP so delete the IP from Status
 				delete(curpolicy.Status.SnatPortsAllocated, snatIp)
@@ -538,6 +568,7 @@ func (r *ReconcileSnatLocalInfo) snatPolicyUpdate(existingPods *corev1.PodList,
 			}
 		}
 	}
+
 	request := FilterPodsPerSnatPolicy(r.client, &snatPolicyList, &fristPod)
 	if len(request) != 0 && !poddeleted && deleted {
 		log.Info("Enque the request again: ", "There is policy match for pod:#####", request)
@@ -620,7 +651,7 @@ func (r *ReconcileSnatLocalInfo) addLocalInfo(snatlocalinfo *aciv1.SnatLocalInfo
 
 func (r *ReconcileSnatLocalInfo) handleDeploymentEvent(request reconcile.Request) (reconcile.Result, error) {
 	// revisit this code t write separate API for GetPodNameFromReoncileRequest to fix the names
-	depName, namespace, slectorstring := utils.GetPodNameFromReoncileRequest(request.Name)
+	depName, namespace, slectorstring, _ := GetPodNameFromReoncileRequest(request.Name)
 	dep := &appsv1.Deployment{}
 	matches := false
 	var snatPolicyName string
@@ -638,23 +669,20 @@ func (r *ReconcileSnatLocalInfo) handleDeploymentEvent(request reconcile.Request
 		log.Info("handleDeploymentEvent", "deployment deleted", dep)
 		deploymentdeleted = true
 	}
-	snatPolicyList := &aciv1.SnatPolicyList{}
-	if err := r.client.List(context.TODO(), &client.ListOptions{Namespace: ""}, snatPolicyList); err != nil {
+	err = json.Unmarshal([]byte(slectorstring), &selector)
+	if err != nil {
+		log.Error(err, "Marshling string Failed")
 		return reconcile.Result{}, nil
 	}
-
-	if deploymentdeleted {
-		err = json.Unmarshal([]byte(slectorstring), &selector)
-		if err != nil {
-			log.Error(err, "Marshling string Failed")
-			return reconcile.Result{}, nil
-		}
-	} else {
-		selector = dep.Spec.Selector.MatchLabels
-		snatPolicyName, matches = utils.CheckMatchesLabletoPolicy(snatPolicyList, dep.ObjectMeta.Labels, namespace)
+	if !deploymentdeleted {
+		snatPolicyName, matches = utils.CheckMatchesLabletoPolicy(r.client, selector, namespace)
 		if matches {
-			log.Info("handleDeploymentEvent", "Labels Matches", dep.ObjectMeta.Labels)
+			if !reflect.DeepEqual(selector, dep.ObjectMeta.Labels) {
+				return reconcile.Result{}, nil
+			}
+			log.Info("handleDeploymentEvent", "Matches", snatPolicyName)
 		}
+		selector = dep.Spec.Selector.MatchLabels
 	}
 	Pods := &corev1.PodList{}
 	err = r.client.List(context.TODO(),
@@ -668,7 +696,7 @@ func (r *ReconcileSnatLocalInfo) handleDeploymentEvent(request reconcile.Request
 		log.Error(err, "Pods list failed for deployment")
 		return reconcile.Result{}, err
 	}
-	_, err = r.updatePods(Pods, matches, snatPolicyName, snatPolicyList, DEPLOYMENT, deploymentdeleted)
+	_, err = r.updatePods(Pods, matches, snatPolicyName, DEPLOYMENT, deploymentdeleted)
 
 	if err != nil {
 		return reconcile.Result{}, err
@@ -677,11 +705,12 @@ func (r *ReconcileSnatLocalInfo) handleDeploymentEvent(request reconcile.Request
 }
 
 func (r *ReconcileSnatLocalInfo) handleNameSpaceEvent(request reconcile.Request) (reconcile.Result, error) {
-	namespaceName, _, resType := utils.GetPodNameFromReoncileRequest(request.Name)
+	namespaceName, _, slectorstring, _ := GetPodNameFromReoncileRequest(request.Name)
 	namespace := &corev1.Namespace{}
 	matches := false
 	var snatPolicyName string
 	namespacedeleted := false
+	selector := make(map[string]string)
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: namespaceName}, namespace)
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("handleNameSpaceEvent", "namespace not found", namespaceName)
@@ -694,13 +723,17 @@ func (r *ReconcileSnatLocalInfo) handleNameSpaceEvent(request reconcile.Request)
 		log.Info("handleNameSpaceEvent", "namespace deleted", namespace)
 		namespacedeleted = true
 	}
-	snatPolicyList := &aciv1.SnatPolicyList{}
-	if err := r.client.List(context.TODO(), &client.ListOptions{Namespace: ""}, snatPolicyList); err != nil {
-		return reconcile.Result{}, nil
-	}
 	if !namespacedeleted {
-		snatPolicyName, matches = utils.CheckMatchesLabletoPolicy(snatPolicyList, namespace.ObjectMeta.Labels, namespaceName)
+		err = json.Unmarshal([]byte(slectorstring), &selector)
+		if err != nil {
+			log.Error(err, "Marshling string Failed")
+			return reconcile.Result{}, nil
+		}
+		snatPolicyName, matches = utils.CheckMatchesLabletoPolicy(r.client, selector, namespaceName)
 		if matches {
+			if !reflect.DeepEqual(selector, namespace.ObjectMeta.Labels) {
+				return reconcile.Result{}, nil
+			}
 			log.Info("handleNameSpaceEvent", "Labels Matches", namespace.ObjectMeta.Labels)
 		}
 	}
@@ -714,7 +747,7 @@ func (r *ReconcileSnatLocalInfo) handleNameSpaceEvent(request reconcile.Request)
 		log.Error(err, "Pods list failed for namespace")
 		return reconcile.Result{}, err
 	}
-	_, err = r.updatePods(Pods, matches, snatPolicyName, snatPolicyList, resType, namespacedeleted)
+	_, err = r.updatePods(Pods, matches, snatPolicyName, NAMESPACE, namespacedeleted)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -723,7 +756,7 @@ func (r *ReconcileSnatLocalInfo) handleNameSpaceEvent(request reconcile.Request)
 
 func (r *ReconcileSnatLocalInfo) handleDeploymentConfigEvent(request reconcile.Request) (reconcile.Result, error) {
 	// revisit this code t write separate API for GetPodNameFromReoncileRequest to fix the names
-	depName, namespace, slectorstring := utils.GetPodNameFromReoncileRequest(request.Name)
+	depName, namespace, slectorstring, _ := GetPodNameFromReoncileRequest(request.Name)
 	dep := &openv1.DeploymentConfig{}
 	var snatPolicyName string
 	deploymentdeleted := false
@@ -741,31 +774,29 @@ func (r *ReconcileSnatLocalInfo) handleDeploymentConfigEvent(request reconcile.R
 		log.Info("handleDeploymentEvent", "deployment deleted", dep)
 		deploymentdeleted = true
 	}
-	snatPolicyList := &aciv1.SnatPolicyList{}
-	if err := r.client.List(context.TODO(), &client.ListOptions{Namespace: ""}, snatPolicyList); err != nil {
+	err = json.Unmarshal([]byte(slectorstring), &selector)
+	if err != nil {
+		log.Error(err, "Marshling string Failed")
 		return reconcile.Result{}, nil
 	}
-	if deploymentdeleted {
-		err = json.Unmarshal([]byte(slectorstring), &selector)
-		if err != nil {
-			log.Error(err, "Marshling string Failed")
-			return reconcile.Result{}, nil
-		}
-	} else {
-		selector = dep.Spec.Selector
-		snatPolicyName, matches = utils.CheckMatchesLabletoPolicy(snatPolicyList, dep.ObjectMeta.Labels, namespace)
+	if !deploymentdeleted {
+		snatPolicyName, matches = utils.CheckMatchesLabletoPolicy(r.client, selector, namespace)
 		if matches {
-			log.Info("handleDeploymentEvent", "Labels Matches", dep.ObjectMeta.Labels)
+			if !reflect.DeepEqual(selector, dep.ObjectMeta.Labels) {
+				return reconcile.Result{}, nil
+			}
+			log.Info("handleDeploymentEvent", "Matches", snatPolicyName)
 		}
+		selector = dep.Spec.Selector
 	}
 	Pods := &corev1.PodList{}
 	r.client.List(context.TODO(),
 		&client.ListOptions{
 			Namespace:     dep.ObjectMeta.Namespace,
-			LabelSelector: labels.SelectorFromSet(dep.Spec.Selector),
+			LabelSelector: labels.SelectorFromSet(selector),
 		},
 		Pods)
-	_, err = r.updatePods(Pods, matches, snatPolicyName, snatPolicyList, DEPLOYMENT, deploymentdeleted)
+	_, err = r.updatePods(Pods, matches, snatPolicyName, DEPLOYMENT, deploymentdeleted)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -773,7 +804,7 @@ func (r *ReconcileSnatLocalInfo) handleDeploymentConfigEvent(request reconcile.R
 }
 
 func (r *ReconcileSnatLocalInfo) updatePods(Pods *corev1.PodList, matches bool, snatPolicyName string,
-	snatPolicyList *aciv1.SnatPolicyList, resType string, resdeleted bool) (reconcile.Result, error) {
+	resType string, resdeleted bool) (reconcile.Result, error) {
 
 	if len(Pods.Items) == 0 {
 		return reconcile.Result{}, nil
@@ -808,33 +839,29 @@ func (r *ReconcileSnatLocalInfo) updatePods(Pods *corev1.PodList, matches bool, 
 			log.Info("Port Range Updated: ", "length#####: ", len(portinuse))
 			return reconcile.Result{}, nil
 		}
-		_, err = r.snatPolicyUpdate(Pods, &snatPolicy, resType, resdeleted, "")
+		_, err = r.snatPolicyUpdate(Pods, &snatPolicy, resType, false, "", resdeleted)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 	} else {
-		for _, item := range snatPolicyList.Items {
-			if item.Status.State != aciv1.Ready {
-				continue
-			}
-
-			snatPolicy, err := utils.GetSnatPolicyCR(r.client, item.ObjectMeta.Name)
-			if err != nil && errors.IsNotFound(err) {
-				log.Error(err, "not matching snatpolicy")
-				continue
-			} else if err != nil {
+		if len(Pods.Items) > 0 {
+			pod := Pods.Items[0]
+			snatPolicy, err := utils.GetSnatPolicyCRFromPod(r.client, &pod)
+			if err != nil {
 				return reconcile.Result{}, err
 			}
-			// Need to return from here as label won't match condtion for Services
-			if !resdeleted && len(snatPolicy.Spec.SnatIp) == 0 {
+			// return if it is empty policy
+			if reflect.DeepEqual(snatPolicy, aciv1.SnatPolicy{}) {
 				return reconcile.Result{}, nil
 			}
-			_, err = r.snatPolicyUpdate(Pods, &snatPolicy, resType, true, "")
-			if err != nil {
+			log.Info("POD Matches for Policy: ", " name: ", snatPolicy.ObjectMeta.Name)
+			_, err1 := r.snatPolicyUpdate(Pods, &snatPolicy, resType, true, "", resdeleted)
+			if err1 != nil {
 				return reconcile.Result{}, err
 			}
 		}
 	}
+
 	return reconcile.Result{}, nil
 }
 
@@ -848,6 +875,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForServices(snatPolicy *aciv1.S
 	// Check before applying the order  pod > dep > ns
 	ls := snatPolicy.Spec.Selector.Labels
 	// list all Pods belong to the label
+	var resType string
 	selector := labels.SelectorFromSet(labels.Set(ls))
 	SerivesList := &corev1.ServiceList{}
 	if len(snatPolicy.Spec.Selector.Labels) == 0 {
@@ -856,6 +884,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForServices(snatPolicy *aciv1.S
 				Namespace: snatPolicy.Spec.Selector.Namespace,
 			},
 			SerivesList)
+		resType = NAMESPACE
 	} else {
 		err = r.client.List(context.TODO(),
 			&client.ListOptions{
@@ -863,6 +892,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForServices(snatPolicy *aciv1.S
 				LabelSelector: selector,
 			},
 			SerivesList)
+		resType = SERVICE
 	}
 	log.Info("Matching lables for", "ServiceList: ", SerivesList)
 	if err != nil {
@@ -902,7 +932,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForServices(snatPolicy *aciv1.S
 					}
 				}
 			}
-			_, err := r.snatPolicyUpdate(Pods, snatPolicy, SERVICE, isSnatPolicyDeleted, snatip)
+			_, err := r.snatPolicyUpdate(Pods, snatPolicy, resType, isSnatPolicyDeleted, snatip, false)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
@@ -910,99 +940,16 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForServices(snatPolicy *aciv1.S
 	}
 	return reconcile.Result{}, nil
 }
-func (r *ReconcileSnatLocalInfo) handlePodForServiceEvent(request reconcile.Request) (reconcile.Result, error) {
-	// Podname: name of the pod for which loop was triggered
-	// PolicyName: name of the snatPolicy for respective pod
-	podName, snatPolicyName, snatIp := utils.GetPodNameFromReoncileRequest(request.Name)
 
-	// Query this pod using k8s client
-	foundPod := &corev1.Pod{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: podName, Namespace: request.Namespace}, foundPod)
-
-	if err != nil && errors.IsNotFound(err) {
-		log.Info("Pod deleted", "PodName:", request.Name)
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-	log.Info("POD found:", "Pod name", foundPod.ObjectMeta.Name)
-	snatPolicy, err := utils.GetSnatPolicyCR(r.client, snatPolicyName)
-	if err != nil {
-		log.Error(err, "not matching snatpolicy")
-		return reconcile.Result{}, err
-	}
-	if snatPolicy.GetDeletionTimestamp() != nil {
-		return reconcile.Result{}, nil
-	}
-
-	localInfo, err := utils.GetLocalInfoCR(r.client, foundPod.Spec.NodeName, os.Getenv("ACI_SNAT_NAMESPACE"))
-	if err != nil {
-		log.Error(err, "localInfo error")
-	}
-	if foundPod.GetObjectMeta().GetDeletionTimestamp() != nil {
-		log.Info("Local Info to be deleted: ", "Pod UUID", string(foundPod.ObjectMeta.Name))
-		if _, ok := localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)]; ok {
-			nodeName := foundPod.Spec.NodeName
-			snatIp := localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)].SnatIp
-			inforesType := localInfo.Spec.LocalInfos[string(foundPod.ObjectMeta.UID)].SnatScope
-			if inforesType == "pod" {
-				return reconcile.Result{}, nil
-			}
-			delete(localInfo.Spec.LocalInfos, string(foundPod.ObjectMeta.UID))
-			log.Info("Local Info to be deleted: ", "Update Snat Policy Status###", len(localInfo.Spec.LocalInfos))
-			if len(localInfo.Spec.LocalInfos) == 0 {
-				log.Info("Local Info to be deleted: ", "Update Snat Policy Status###", nodeName)
-				if utils.UpdateSnatPolicyStatus(nodeName, &snatPolicy, snatIp, r.client) {
-					err = r.client.Status().Update(context.TODO(), &snatPolicy)
-					if err != nil {
-						log.Error(err, "Policy Status Update Failed")
-						return reconcile.Result{}, err
-
-					}
-				}
-			}
-			return utils.UpdateLocalInfoCR(r.client, localInfo)
-		}
-		return reconcile.Result{}, nil
-	}
-	if foundPod.Status.Phase == "Running" {
-		portinuse := make(map[string][]aciv1.NodePortRange)
-		if len(snatPolicy.Status.SnatPortsAllocated) != 0 {
-			portinuse = snatPolicy.Status.SnatPortsAllocated
-		}
-		portrange, exists :=
-			utils.GetPortRangeForServiceIP(r.client, foundPod.Spec.NodeName, &snatPolicy, snatIp)
-		if exists == false {
-			var nodePortRnage aciv1.NodePortRange
-			nodePortRnage.NodeName = foundPod.Spec.NodeName
-			nodePortRnage.PortRange = portrange
-			portinuse[snatIp] = append(portinuse[snatIp], nodePortRnage)
-			snatPolicy.Status.SnatPortsAllocated = portinuse
-			log.Info("Port Range Updated: ", "List of Ports InUse: ", portinuse)
-			err = r.client.Status().Update(context.TODO(), &snatPolicy)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-		}
-		_, updated, err1 := r.addLocalInfo(&localInfo, foundPod, &snatPolicy, SERVICE, snatIp)
-		if err1 != nil {
-			log.Error(err, "Adding localInfo error")
-			return reconcile.Result{}, err
-		}
-		if updated {
-			return utils.UpdateLocalInfoCR(r.client, localInfo)
-		}
-	}
-	return reconcile.Result{}, nil
-}
 func (r *ReconcileSnatLocalInfo) handleServiceEvent(request reconcile.Request) (reconcile.Result, error) {
 	// revisit this code t write separate API for GetPodNameFromReoncileRequest to fix the names
-	servicename, namespace, slectorstring := utils.GetPodNameFromReoncileRequest(request.Name)
+	servicename, namespace, slectorstring, _ := GetPodNameFromReoncileRequest(request.Name)
 	log.Info("handleServiceEvent", "name", servicename)
 	service := &corev1.Service{}
 	matches := false
 	var snatPolicyName string
 	var snatip string
+	var resType string
 	servicedeleted := false
 	selector := make(map[string]string)
 	err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: namespace, Name: servicename}, service)
@@ -1029,9 +976,22 @@ func (r *ReconcileSnatLocalInfo) handleServiceEvent(request reconcile.Request) (
 		}
 	} else {
 		selector = service.Spec.Selector
-		snatPolicyName, matches = utils.CheckMatchesLabletoPolicy(snatPolicyList, service.ObjectMeta.Labels, namespace)
+		snatPolicyName, matches = utils.CheckMatchesLabletoPolicy(r.client, service.ObjectMeta.Labels, namespace)
 		if matches {
 			log.Info("handleServiceEvent", "Labels Matches", service.ObjectMeta.Labels)
+		} else {
+			// This Case is possible when Service doesn't have labels only namespace based
+			for _, item := range snatPolicyList.Items {
+				if item.Status.State != aciv1.Ready {
+					continue
+				}
+				if len(item.Spec.SnatIp) == 0 && len(item.Spec.Selector.Labels) == 0 &&
+					item.Spec.Selector.Namespace == namespace {
+					matches = true
+					snatPolicyName = item.ObjectMeta.Name
+					break
+				}
+			}
 		}
 	}
 	log.Info("handleServiceEvent:", "Selector###", selector)
@@ -1048,7 +1008,6 @@ func (r *ReconcileSnatLocalInfo) handleServiceEvent(request reconcile.Request) (
 	}
 	if len(Pods.Items) == 0 {
 		log.Info("handleServiceEvent:", "length Zero###", Pods)
-
 		return reconcile.Result{}, nil
 	}
 	if matches == true {
@@ -1064,10 +1023,9 @@ func (r *ReconcileSnatLocalInfo) handleServiceEvent(request reconcile.Request) (
 		} else if err != nil {
 			return reconcile.Result{}, err
 		}
-		if snatPolicy.GetDeletionTimestamp() != nil {
-			return reconcile.Result{}, err
+		if snatPolicy.GetDeletionTimestamp() != nil || len(snatPolicy.Spec.SnatIp) != 0 {
+			return reconcile.Result{}, nil
 		}
-
 		portinuse := make(map[string][]aciv1.NodePortRange)
 		if len(snatPolicy.Status.SnatPortsAllocated) != 0 {
 			portinuse = snatPolicy.Status.SnatPortsAllocated
@@ -1086,29 +1044,39 @@ func (r *ReconcileSnatLocalInfo) handleServiceEvent(request reconcile.Request) (
 		if len(portinuse) == 0 {
 			return reconcile.Result{}, nil
 		}
-		if servicedeleted {
-			_, err = r.snatPolicyUpdate(Pods, &snatPolicy, SERVICE, true, snatip)
+		if len(snatPolicy.Spec.Selector.Labels) != 0 {
+			resType = SERVICE
 		} else {
-			_, err = r.snatPolicyUpdate(Pods, &snatPolicy, SERVICE, false, snatip)
+			resType = NAMESPACE
 		}
+		_, err = r.snatPolicyUpdate(Pods, &snatPolicy, resType, false, snatip, false)
 		if err != nil {
 			log.Info("SnatPolicy Update For: ", "Failed: ", snatPolicy)
 			return reconcile.Result{}, err
 		}
 
 	} else {
-		for _, item := range snatPolicyList.Items {
-			if item.Status.State != aciv1.Ready {
-				continue
-			}
-			snatPolicy, err := utils.GetSnatPolicyCR(r.client, item.ObjectMeta.Name)
-			if err != nil && errors.IsNotFound(err) {
-				log.Error(err, "not matching snatpolicy")
-				continue
-			} else if err != nil {
+		if len(Pods.Items) > 0 {
+			// check the first pod get the policy info
+			pod := Pods.Items[0]
+			snatPolicy, err := utils.GetSnatPolicyCRFromPod(r.client, &pod)
+			if err != nil {
 				return reconcile.Result{}, err
 			}
-			_, err = r.snatPolicyUpdate(Pods, &snatPolicy, SERVICE, true, snatip)
+			// return if it is empty policy
+			if reflect.DeepEqual(snatPolicy, aciv1.SnatPolicy{}) {
+				return reconcile.Result{}, nil
+			}
+			if len(snatPolicy.Spec.Selector.Labels) != 0 {
+				resType = SERVICE
+			} else {
+				resType = NAMESPACE
+			}
+			if servicedeleted {
+				_, err = r.snatPolicyUpdate(Pods, &snatPolicy, resType, true, snatip, true)
+			} else {
+				_, err = r.snatPolicyUpdate(Pods, &snatPolicy, resType, true, snatip, false)
+			}
 			if err != nil {
 				return reconcile.Result{}, err
 			}
@@ -1149,7 +1117,8 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForCluster(snatPolicy *aciv1.Sn
 			}
 		}
 	}
-	_, err = r.snatPolicyUpdate(Pods, snatPolicy, CLUSTER, isSnatPolicyDeleted, "")
+	log.Info("SnatPolicy applied at Cluster: ", "for policy: ", snatPolicy.ObjectMeta.Name)
+	_, err = r.snatPolicyUpdate(Pods, snatPolicy, CLUSTER, isSnatPolicyDeleted, "", false)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -1195,8 +1164,9 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForNameSpace(snatPolicy *aciv1.
 			}
 		}
 	}
+	log.Info("SnatPolicy applied at namespace: ", "for policy: ", snatPolicy.ObjectMeta.Name)
 	if len(nameSpacePods.Items) != 0 {
-		_, err = r.snatPolicyUpdate(nameSpacePods, snatPolicy, NAMESPACE, isSnatPolicyDeleted, "")
+		_, err = r.snatPolicyUpdate(nameSpacePods, snatPolicy, NAMESPACE, isSnatPolicyDeleted, "", false)
 		if err != nil {
 			return reconcile.Result{}, err
 		}

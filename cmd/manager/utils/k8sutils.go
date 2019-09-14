@@ -3,8 +3,8 @@ package utils
 import (
 	"context"
 	"os"
-	"strings"
 	"strconv"
+	"strings"
 
 	// nodeinfo "github.com/noironetworks/aci-containers/pkg/nodeinfo/apis/aci.nodeinfo/v1"
 
@@ -23,19 +23,6 @@ const (
 	MIN_PORT = 5000
 )
 const PORTPERNODES = 3000
-
-// Given a reconcile request name, it extracts out pod name by omiiting snat-policy- from it
-// eg: snat-policy-foo-podname -> podname, foo
-func GetPodNameFromReoncileRequest(requestName string) (string, string, string) {
-
-	temp := strings.Split(requestName, "$")
-	if len(temp) != 4 {
-		UtilLog.Info("Length should be 4", "input string:", requestName, "lengthGot", len(temp))
-		return "", "", ""
-	}
-	name, resName, resType := temp[1], temp[2], temp[3]
-	return resName, name, resType
-}
 
 // Get nodeinfo object matching given name of the node
 // Optimization can be done here:
@@ -100,7 +87,8 @@ func GetSnatPolicyCR(c client.Client, policyName string) (aciv1.SnatPolicy, erro
 }
 
 // createSnatLocalInfoCR Creates a SnatLocalInfo CR
-func CreateLocalInfoCR(c client.Client, localInfoSpec aciv1.SnatLocalInfoSpec, nodeName string) (*aciv1.SnatLocalInfo, reconcile.Result, error) {
+func CreateLocalInfoCR(c client.Client, localInfoSpec aciv1.SnatLocalInfoSpec,
+	nodeName string) (*aciv1.SnatLocalInfo, reconcile.Result, error) {
 
 	obj := &aciv1.SnatLocalInfo{
 		ObjectMeta: metav1.ObjectMeta{
@@ -119,7 +107,8 @@ func CreateLocalInfoCR(c client.Client, localInfoSpec aciv1.SnatLocalInfoSpec, n
 }
 
 // Delete SnatLocalInfoCR Creates a SnatLocalInfo CR
-func DeleteLocalInfoCR(c client.Client, localInfoSpec aciv1.SnatLocalInfoSpec, nodeName string) (reconcile.Result, error) {
+func DeleteLocalInfoCR(c client.Client, localInfoSpec aciv1.SnatLocalInfoSpec,
+	nodeName string) (reconcile.Result, error) {
 
 	obj := &aciv1.SnatLocalInfo{
 		ObjectMeta: metav1.ObjectMeta{
@@ -179,34 +168,35 @@ func UpdateGlobalInfoCR(c client.Client, globalInfo aciv1.SnatGlobalInfo) (recon
 	return reconcile.Result{}, nil
 }
 
-// Get portRange from snat-operator-config configMap 
+// Get portRange from snat-operator-config configMap
 func getPortRangeFromConfigMap(c client.Client) (aciv1.PortRange, int) {
-        cMap := &corev1.ConfigMap{}
-        err := c.Get(context.Background(), client.ObjectKey{
-                Namespace: "aci-containers-system",
-                Name:      "snat-operator-config",
-                }, cMap)
+	cMap := &corev1.ConfigMap{}
+	err := c.Get(context.Background(), client.ObjectKey{
+		Namespace: "aci-containers-system",
+		Name:      "snat-operator-config",
+	}, cMap)
 	var resultPortRange aciv1.PortRange
 	resultPortRange.Start = MIN_PORT
 	resultPortRange.End = MAX_PORT
-        if err != nil {
-                return resultPortRange, PORTPERNODES
-        }
-        data := cMap.Data
-        start, err1 := strconv.Atoi(data["start"])
-        end, err2 := strconv.Atoi(data["end"])
-        portsPerNode, err3 := strconv.Atoi(data["ports-per-node"])
-        if (err1 != nil || err2 != nil || err3 != nil ||
-                start < 5000 || end > 65000 || start > end || portsPerNode > end-start+1) {
-                return resultPortRange, PORTPERNODES
-        }
+	if err != nil {
+		return resultPortRange, PORTPERNODES
+	}
+	data := cMap.Data
+	start, err1 := strconv.Atoi(data["start"])
+	end, err2 := strconv.Atoi(data["end"])
+	portsPerNode, err3 := strconv.Atoi(data["ports-per-node"])
+	if err1 != nil || err2 != nil || err3 != nil ||
+		start < 5000 || end > 65000 || start > end || portsPerNode > end-start+1 {
+		return resultPortRange, PORTPERNODES
+	}
 	resultPortRange.Start = start
 	resultPortRange.End = end
-        return resultPortRange, portsPerNode
+	return resultPortRange, portsPerNode
 }
 
 // Get IP and port for pod for which notification has come to reconcile loop
-func GetIPPortRangeForPod (c client.Client, NodeName string, snatpolicy *aciv1.SnatPolicy) (string, aciv1.PortRange, bool) {
+func GetIPPortRangeForPod(c client.Client, NodeName string,
+	snatpolicy *aciv1.SnatPolicy) (string, aciv1.PortRange, bool) {
 	log.Info("Get Port Range For", "Node name: ", NodeName)
 	snatPortsAllocated := snatpolicy.Status.SnatPortsAllocated
 	snatIps := ExpandCIDRs(snatpolicy.Spec.SnatIp)
@@ -242,17 +232,23 @@ func GetIPPortRangeForPod (c client.Client, NodeName string, snatpolicy *aciv1.S
 	}
 	return "", aciv1.PortRange{}, false
 }
-func UpdateSnatPolicyStatus(NodeName string, snatpolicy *aciv1.SnatPolicy, snatIp string, c client.Client) bool {
+
+// Update the SnatPolicy Status when the there is no localinfo present for snatIp
+func UpdateSnatPolicyStatus(NodeName string, snatpolicy *aciv1.SnatPolicy,
+	snatIp string, c client.Client) bool {
 	if snatpolicy.GetDeletionTimestamp() != nil {
 		return false
 	}
 	if _, ok := snatpolicy.Status.SnatPortsAllocated[snatIp]; ok {
-		nodePortRange := snatpolicy.Status.SnatPortsAllocated[snatIp]
+		nodePortRange := snatpolicy.Status.SnatPortsAllocated[snatIp][:]
 		for i, val := range nodePortRange {
 			if NodeName == val.NodeName {
 				nodePortRange[i] = nodePortRange[len(nodePortRange)-1]
 				nodePortRange = nodePortRange[:len(nodePortRange)-1]
 				snatpolicy.Status.SnatPortsAllocated[snatIp] = nodePortRange
+				if len(nodePortRange) == 0 {
+					delete(snatpolicy.Status.SnatPortsAllocated, snatIp)
+				}
 				return true
 			}
 		}
@@ -260,7 +256,9 @@ func UpdateSnatPolicyStatus(NodeName string, snatpolicy *aciv1.SnatPolicy, snatI
 	return false
 }
 
-func GetPortRangeForServiceIP(c client.Client, NodeName string, snatpolicy *aciv1.SnatPolicy, snatIp string) (aciv1.PortRange, bool) {
+// Get the Portrange for the Node
+func GetPortRangeForServiceIP(c client.Client, NodeName string,
+	snatpolicy *aciv1.SnatPolicy, snatIp string) (aciv1.PortRange, bool) {
 	snatPortsAllocated := snatpolicy.Status.SnatPortsAllocated
 	portRange, portsPerNode := getPortRangeFromConfigMap(c)
 	var currPortRange []aciv1.PortRange
@@ -292,9 +290,14 @@ func GetPortRangeForServiceIP(c client.Client, NodeName string, snatpolicy *aciv
 }
 
 // Check target labels matches any snatpolicy labels
-func CheckMatchesLabletoPolicy(snatPolicyList *aciv1.SnatPolicyList, labels map[string]string, namespace string) (string, bool) {
+func CheckMatchesLabletoPolicy(c client.Client, labels map[string]string,
+	namespace string) (string, bool) {
 	matches := false
 	var snatPolicyName string
+	snatPolicyList := &aciv1.SnatPolicyList{}
+	if err := c.List(context.TODO(), &client.ListOptions{Namespace: ""}, snatPolicyList); err != nil {
+		return snatPolicyName, matches
+	}
 	for _, item := range snatPolicyList.Items {
 		if item.Status.State != aciv1.Ready {
 			continue
@@ -310,11 +313,6 @@ func CheckMatchesLabletoPolicy(snatPolicyList *aciv1.SnatPolicyList, labels map[
 				snatPolicyName = item.ObjectMeta.Name
 				break
 			}
-		} else if len(item.Spec.Selector.Labels) == 0 &&
-			item.Spec.Selector.Namespace != "" &&
-			item.Spec.Selector.Namespace == namespace {
-			matches = true
-			snatPolicyName = item.ObjectMeta.Name
 		}
 	}
 	return snatPolicyName, matches
@@ -357,4 +355,25 @@ func AllocateIpPortRangeforservice(c client.Client, portInuse map[string][]aciv1
 		}
 	}
 	return updated
+}
+
+// Get Policy matches the pod which is present it local Info
+func GetSnatPolicyCRFromPod(c client.Client, pod *corev1.Pod) (aciv1.SnatPolicy, error) {
+	foundSnatPolicy := &aciv1.SnatPolicy{}
+	localInfo, err := GetLocalInfoCR(c, pod.Spec.NodeName, os.Getenv("ACI_SNAT_NAMESPACE"))
+	if err == nil {
+		if len(localInfo.Spec.LocalInfos) > 0 {
+			if _, ok := localInfo.Spec.LocalInfos[string(pod.ObjectMeta.UID)]; ok {
+				snatPolicyName := localInfo.Spec.LocalInfos[string(pod.ObjectMeta.UID)].SnatPolicyName
+				*foundSnatPolicy, err = GetSnatPolicyCR(c, snatPolicyName)
+				if err != nil && errors.IsNotFound(err) {
+					log.Error(err, "not matching snatpolicy")
+					return *foundSnatPolicy, nil
+				} else if err != nil {
+					return *foundSnatPolicy, err
+				}
+			}
+		}
+	}
+	return *foundSnatPolicy, nil
 }

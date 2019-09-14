@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"strings"
 
 	"github.com/noironetworks/snat-operator/cmd/manager/utils"
 
 	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 	openv1 "github.com/openshift/api/apps/v1"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -57,11 +57,26 @@ type handleDeploymentConfig struct {
 	predicates []predicate.Predicate
 }
 
+const pattern = "@$@"
+
+// Given a reconcile request name, it extracts out pod name by omiiting snat-policy- from it
+// eg: snat-policy-foo-podname -> podname, foo
+func GetPodNameFromReoncileRequest(requestName string) (string, string, string, string) {
+
+	var name, resName, resType, snatIp string
+	temp := strings.Split(requestName, pattern)
+	if len(temp) == 5 {
+		name, resName, resType, snatIp = temp[1], temp[2], temp[3], temp[4]
+	} else if len(temp) == 4 {
+		name, resName, resType = temp[1], temp[2], temp[3]
+	}
+	return resName, name, resType, snatIp
+}
+
 func (h *handlePodsForPodsMapper) Map(obj handler.MapObject) []reconcile.Request {
 	if obj.Object == nil {
 		return nil
 	}
-
 	pod, ok := obj.Object.(*corev1.Pod)
 	if !ok {
 		return nil
@@ -105,7 +120,8 @@ func (h *handleSnatPoliciesMapper) Map(obj handler.MapObject) []reconcile.Reques
 		}
 		requests = append(requests, reconcile.Request{
 			NamespacedName: types.NamespacedName{
-				Name: "snat-policy$" + snatpolicy.ObjectMeta.Name + "$" + "created" + "$" + "new",
+				Name: "snat-policy" + pattern + snatpolicy.ObjectMeta.Name +
+					pattern + "created" + pattern + "new",
 			},
 		})
 	} else {
@@ -116,7 +132,8 @@ func (h *handleSnatPoliciesMapper) Map(obj handler.MapObject) []reconcile.Reques
 		MapperLog.Info("OldObj", "Object is Updated: ", snatpolicy)
 		requests = append(requests, reconcile.Request{
 			NamespacedName: types.NamespacedName{
-				Name: "snat-policy$" + snatpolicy.ObjectMeta.Name + "$" + "deleted" + "$" + string(PolicyString),
+				Name: "snat-policy" + pattern + snatpolicy.ObjectMeta.Name +
+					pattern + "deleted" + pattern + string(PolicyString),
 			},
 		})
 	}
@@ -148,7 +165,8 @@ Loop:
 				requests = append(requests, reconcile.Request{
 					NamespacedName: types.NamespacedName{
 						Namespace: pod.ObjectMeta.Namespace,
-						Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + CLUSTER,
+						Name: "snat-policyforpod" + pattern + item.ObjectMeta.Name + pattern +
+							pod.ObjectMeta.Name + pattern + CLUSTER,
 					},
 				})
 				if resType == "" {
@@ -180,42 +198,30 @@ Loop:
 					},
 					SerivesList)
 				if err == nil {
-					if len(item.Spec.Selector.Labels) == 0 {
-						for _, service := range SerivesList.Items {
-							if utils.MatchLabels(service.Spec.Selector, pod.ObjectMeta.Labels) {
-								if len(service.Status.LoadBalancer.Ingress) == 0 {
-									continue
-								}
-								requests = append(requests, reconcile.Request{
-									NamespacedName: types.NamespacedName{
-										Namespace: pod.ObjectMeta.Namespace,
-										Name:      "snat-policyforservicepod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + service.Status.LoadBalancer.Ingress[0].IP,
-									},
-								})
-								if resType != POD {
-									resType = service.Status.LoadBalancer.Ingress[0].IP
-								}
-							}
-
+					matches := false
+					for _, service := range SerivesList.Items {
+						if len(service.Status.LoadBalancer.Ingress) == 0 {
+							continue
 						}
-					} else {
-						for _, service := range SerivesList.Items {
-							if utils.MatchLabels(service.Spec.Selector, pod.ObjectMeta.Labels) {
-								if utils.MatchLabels(item.Spec.Selector.Labels, service.ObjectMeta.Labels) {
-									if len(service.Status.LoadBalancer.Ingress) == 0 {
-										continue
-									}
-									requests = append(requests, reconcile.Request{
-										NamespacedName: types.NamespacedName{
-											Namespace: pod.ObjectMeta.Namespace,
-											Name:      "snat-policyforservicepod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + service.Status.LoadBalancer.Ingress[0].IP,
-										},
-									})
-									if resType != POD {
-										resType = service.Status.LoadBalancer.Ingress[0].IP
-									}
-									//break Loop
-								}
+						if utils.MatchLabels(service.Spec.Selector, pod.ObjectMeta.Labels) {
+							if utils.MatchLabels(item.Spec.Selector.Labels, service.ObjectMeta.Labels) {
+								resType = SERVICE
+								matches = true
+							} else if len(item.Spec.Selector.Labels) == 0 && item.Spec.Selector.Namespace == service.ObjectMeta.Namespace {
+								resType = NAMESPACE
+								matches = true
+							}
+						}
+						if matches {
+							requests = append(requests, reconcile.Request{
+								NamespacedName: types.NamespacedName{
+									Namespace: pod.ObjectMeta.Namespace,
+									Name: "snat-policyforpod" + pattern + item.ObjectMeta.Name + pattern +
+										pod.ObjectMeta.Name + pattern + resType + pattern + service.Status.LoadBalancer.Ingress[0].IP,
+								},
+							})
+							if resType == POD || resType == SERVICE {
+								break Loop
 							}
 						}
 					}
@@ -229,7 +235,8 @@ Loop:
 					requests = append(requests, reconcile.Request{
 						NamespacedName: types.NamespacedName{
 							Namespace: pod.ObjectMeta.Namespace,
-							Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + NAMESPACE,
+							Name: "snat-policyforpod" + pattern + item.ObjectMeta.Name + pattern +
+								pod.ObjectMeta.Name + pattern + NAMESPACE,
 						},
 					})
 					if resType == CLUSTER || resType == "" {
@@ -244,7 +251,8 @@ Loop:
 				requests = append(requests, reconcile.Request{
 					NamespacedName: types.NamespacedName{
 						Namespace: pod.ObjectMeta.Namespace,
-						Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + POD,
+						Name: "snat-policyforpod" + pattern + item.ObjectMeta.Name +
+							pattern + pod.ObjectMeta.Name + pattern + POD,
 					},
 				})
 				resType = POD
@@ -279,7 +287,8 @@ Loop:
 						requests = append(requests, reconcile.Request{
 							NamespacedName: types.NamespacedName{
 								Namespace: pod.ObjectMeta.Namespace,
-								Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + DEPLOYMENT,
+								Name: "snat-policyforpod" + pattern + item.ObjectMeta.Name +
+									pattern + pod.ObjectMeta.Name + pattern + DEPLOYMENT,
 							},
 						})
 						if resType == CLUSTER || resType == NAMESPACE || resType == "" {
@@ -320,7 +329,8 @@ Loop:
 						requests = append(requests, reconcile.Request{
 							NamespacedName: types.NamespacedName{
 								Namespace: pod.ObjectMeta.Namespace,
-								Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + DEPLOYMENT,
+								Name: "snat-policyforpod" + pattern + item.ObjectMeta.Name + pattern +
+									pod.ObjectMeta.Name + pattern + DEPLOYMENT,
 							},
 						})
 						if resType == CLUSTER || resType == NAMESPACE || resType == "" {
@@ -343,7 +353,8 @@ Loop:
 					requests = append(requests, reconcile.Request{
 						NamespacedName: types.NamespacedName{
 							Namespace: pod.ObjectMeta.Namespace,
-							Name:      "snat-policyforpod$" + item.ObjectMeta.Name + "$" + pod.ObjectMeta.Name + "$" + NAMESPACE,
+							Name: "snat-policyforpod" + pattern + item.ObjectMeta.Name + pattern +
+								pod.ObjectMeta.Name + pattern + NAMESPACE,
 						},
 					})
 					if resType == CLUSTER || resType == "" {
@@ -360,7 +371,7 @@ Loop:
 	}
 	var newrequests []reconcile.Request
 	for _, request := range requests {
-		_, _, res := utils.GetPodNameFromReoncileRequest(request.Name)
+		_, _, res, _ := GetPodNameFromReoncileRequest(request.Name)
 		if resType == res {
 			newrequests = append(newrequests, request)
 			break
@@ -386,6 +397,7 @@ func (h *handleDeployment) Map(obj handler.MapObject) []reconcile.Request {
 	MapperLog.Info("Deployment  Info Obj", "mapper handling first ###", obj.Object)
 	var requests []reconcile.Request
 	curdep := &appsv1.Deployment{}
+	var slectorString []byte
 	if obj.Object == nil {
 		return nil
 	}
@@ -396,17 +408,18 @@ func (h *handleDeployment) Map(obj handler.MapObject) []reconcile.Request {
 	err := h.client.Get(context.TODO(), types.NamespacedName{Namespace: deployment.ObjectMeta.Namespace,
 		Name: deployment.ObjectMeta.Name}, curdep)
 	if err == nil {
-		if reflect.DeepEqual(deployment.ObjectMeta.Labels, curdep.ObjectMeta.Labels) {
-			return nil
-		}
+		slectorString, err = json.Marshal(deployment.ObjectMeta.Labels)
+	} else {
+		slectorString, err = json.Marshal(deployment.Spec.Selector.MatchLabels)
 	}
-	slectorString, err := json.Marshal(deployment.Spec.Selector.MatchLabels)
 	if err != nil {
-		MapperLog.Error(err, "Failed to Marshal snatIp")
+		MapperLog.Error(err, "Failed to Marshal slectorString")
+		return nil
 	}
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Name: "snat-deployment$" + deployment.ObjectMeta.Namespace + "$" + deployment.ObjectMeta.Name + "$" + string(slectorString),
+			Name: "snat-deployment" + pattern + deployment.ObjectMeta.Namespace + pattern +
+				deployment.ObjectMeta.Name + pattern + string(slectorString),
 		},
 	})
 	return requests
@@ -416,6 +429,7 @@ func (h *handleDeploymentConfig) Map(obj handler.MapObject) []reconcile.Request 
 	MapperLog.Info("DeploymentConfig  Info Obj", "mapper handling first ###", obj.Object)
 	var requests []reconcile.Request
 	curdep := &openv1.DeploymentConfig{}
+	var slectorString []byte
 	if obj.Object == nil {
 		return nil
 	}
@@ -426,17 +440,20 @@ func (h *handleDeploymentConfig) Map(obj handler.MapObject) []reconcile.Request 
 	err := h.client.Get(context.TODO(), types.NamespacedName{Namespace: deployment.ObjectMeta.Namespace,
 		Name: deployment.ObjectMeta.Name}, curdep)
 	if err == nil {
-		if reflect.DeepEqual(deployment.ObjectMeta.Labels, curdep.ObjectMeta.Labels) {
-			return nil
-		}
+		// otherwise set the updated label
+		slectorString, err = json.Marshal(deployment.ObjectMeta.Labels)
+	} else {
+		//set the selector in case of delete of deployment
+		slectorString, err = json.Marshal(deployment.Spec.Selector)
 	}
-	slectorString, err := json.Marshal(deployment.Spec.Selector)
 	if err != nil {
-		MapperLog.Error(err, "Failed to Marshal snatIp")
+		MapperLog.Error(err, "Failed to Marshal slectorString")
+		return nil
 	}
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Name: "snat-deploymentconfig$" + deployment.ObjectMeta.Namespace + "$" + deployment.ObjectMeta.Name + "$" + string(slectorString),
+			Name: "snat-deploymentconfig" + pattern + deployment.ObjectMeta.Namespace + pattern +
+				deployment.ObjectMeta.Name + pattern + string(slectorString),
 		},
 	})
 	return requests
@@ -445,6 +462,7 @@ func (h *handleDeploymentConfig) Map(obj handler.MapObject) []reconcile.Request 
 func (h *handleNamespace) Map(obj handler.MapObject) []reconcile.Request {
 	var requests []reconcile.Request
 	curnamespace := &corev1.Namespace{}
+	var slectorString []byte
 	MapperLog.Info("NameSpace Info Obj", "mapper handling first ###", obj.Object)
 	if obj.Object == nil {
 		return nil
@@ -454,14 +472,17 @@ func (h *handleNamespace) Map(obj handler.MapObject) []reconcile.Request {
 		return nil
 	}
 	err := h.client.Get(context.TODO(), types.NamespacedName{Name: namespace.ObjectMeta.Name}, curnamespace)
-	if err == nil && namespace.GetDeletionTimestamp() == nil {
-		if reflect.DeepEqual(namespace.ObjectMeta.Labels, curnamespace.ObjectMeta.Labels) {
-			return nil
-		}
+	if err == nil {
+		slectorString, err = json.Marshal(curnamespace.ObjectMeta.Labels)
+	}
+	if err != nil {
+		MapperLog.Error(err, "Failed to Marshal slectorString")
+		return nil
 	}
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Name: "snat-namespace$" + "labelchange" + "$" + namespace.ObjectMeta.Name + "$" + NAMESPACE,
+			Name: "snat-namespace" + pattern + "labelchange" + pattern +
+				namespace.ObjectMeta.Name + pattern + string(slectorString),
 		},
 	})
 	return requests
@@ -480,10 +501,12 @@ func (h *handleService) Map(obj handler.MapObject) []reconcile.Request {
 	slectorString, err := json.Marshal(service.Spec.Selector)
 	if err != nil {
 		MapperLog.Error(err, "Failed to Marshal snatIp")
+		return nil
 	}
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Name: "snat-service$" + service.ObjectMeta.Namespace + "$" + service.ObjectMeta.Name + "$" + string(slectorString),
+			Name: "snat-service" + pattern + service.ObjectMeta.Namespace + pattern +
+				service.ObjectMeta.Name + pattern + string(slectorString),
 		},
 	})
 	return requests
