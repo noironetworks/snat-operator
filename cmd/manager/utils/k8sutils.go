@@ -236,9 +236,6 @@ func GetIPPortRangeForPod(c client.Client, NodeName string,
 // Update the SnatPolicy Status when the there is no localinfo present for snatIp
 func UpdateSnatPolicyStatus(NodeName string, snatpolicy *aciv1.SnatPolicy,
 	snatIp string, c client.Client) bool {
-	if snatpolicy.GetDeletionTimestamp() != nil {
-		return false
-	}
 	if _, ok := snatpolicy.Status.SnatPortsAllocated[snatIp]; ok {
 		nodePortRange := snatpolicy.Status.SnatPortsAllocated[snatIp][:]
 		for i, val := range nodePortRange {
@@ -252,6 +249,7 @@ func UpdateSnatPolicyStatus(NodeName string, snatpolicy *aciv1.SnatPolicy,
 				return true
 			}
 		}
+		return true
 	}
 	return false
 }

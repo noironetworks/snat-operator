@@ -2,7 +2,7 @@ package snatpolicy
 
 import (
 	"context"
-	"fmt"
+	"os"
 
 	"github.com/go-logr/logr"
 	"github.com/noironetworks/snat-operator/cmd/manager/utils"
@@ -21,7 +21,6 @@ import (
 const snatPolicyFinalizer = "finalizer.snatpolicy.aci.snat"
 
 var log = logf.Log.WithName("controller_snatpolicy")
-var errSnatPolicyObject = fmt.Errorf("Snat policy obj entries are not cleared")
 
 // Add creates a new SnatPolicy Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -149,8 +148,22 @@ func (r *ReconcileSnatPolicy) addFinalizer(m *aciv1.SnatPolicy) error {
 func (r *ReconcileSnatPolicy) finalizeSnatPolicy(reqLogger logr.Logger, m *aciv1.SnatPolicy) error {
 	if len(m.Status.SnatPortsAllocated) != 0 {
 		for _, portslist := range m.Status.SnatPortsAllocated {
-			if len(portslist) > 0 {
-				return errSnatPolicyObject
+			for _, nodeinfo := range portslist {
+				localInfo, _ := utils.GetLocalInfoCR(r.client, nodeinfo.NodeName, os.Getenv("ACI_SNAT_NAMESPACE"))
+				update := false
+				for uid, local := range localInfo.Spec.LocalInfos {
+					if local.SnatPolicyName == m.ObjectMeta.Name {
+						delete(localInfo.Spec.LocalInfos, uid)
+						update = true
+					}
+				}
+				if update {
+					_, err := utils.UpdateLocalInfoCR(r.client, localInfo)
+					if err != nil {
+						reqLogger.Error(err, "Could not update localinfo for", "node Name", nodeinfo.NodeName)
+						return err
+					}
+				}
 			}
 		}
 	}

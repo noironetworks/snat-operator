@@ -407,7 +407,7 @@ func (h *handleDeployment) Map(obj handler.MapObject) []reconcile.Request {
 	}
 	err := h.client.Get(context.TODO(), types.NamespacedName{Namespace: deployment.ObjectMeta.Namespace,
 		Name: deployment.ObjectMeta.Name}, curdep)
-	if err == nil {
+	if err == nil && curdep.GetDeletionTimestamp() == nil {
 		slectorString, err = json.Marshal(deployment.ObjectMeta.Labels)
 	} else {
 		slectorString, err = json.Marshal(deployment.Spec.Selector.MatchLabels)
@@ -439,7 +439,7 @@ func (h *handleDeploymentConfig) Map(obj handler.MapObject) []reconcile.Request 
 	}
 	err := h.client.Get(context.TODO(), types.NamespacedName{Namespace: deployment.ObjectMeta.Namespace,
 		Name: deployment.ObjectMeta.Name}, curdep)
-	if err == nil {
+	if err == nil && curdep.GetDeletionTimestamp() == nil {
 		// otherwise set the updated label
 		slectorString, err = json.Marshal(deployment.ObjectMeta.Labels)
 	} else {
@@ -472,13 +472,14 @@ func (h *handleNamespace) Map(obj handler.MapObject) []reconcile.Request {
 		return nil
 	}
 	err := h.client.Get(context.TODO(), types.NamespacedName{Name: namespace.ObjectMeta.Name}, curnamespace)
-	if err == nil {
-		slectorString, err = json.Marshal(curnamespace.ObjectMeta.Labels)
+	if err == nil && curnamespace.GetDeletionTimestamp() == nil {
+		slectorString, err = json.Marshal(namespace.ObjectMeta.Labels)
+		if err != nil {
+			MapperLog.Error(err, "Failed to Marshal slectorString")
+			return nil
+		}
 	}
-	if err != nil {
-		MapperLog.Error(err, "Failed to Marshal slectorString")
-		return nil
-	}
+
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Name: "snat-namespace" + pattern + "labelchange" + pattern +
