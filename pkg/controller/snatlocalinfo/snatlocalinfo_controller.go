@@ -446,7 +446,6 @@ func (r *ReconcileSnatLocalInfo) snatPolicyUpdate(existingPods *corev1.PodList,
 	poddeleted := false
 	snatPolicyList := aciv1.SnatPolicyList{}
 	var fristPod corev1.Pod
-
 	if len(existingPods.Items) == 0 {
 		return reconcile.Result{}, nil
 	}
@@ -503,17 +502,17 @@ func (r *ReconcileSnatLocalInfo) snatPolicyUpdate(existingPods *corev1.PodList,
 				delete(localInfo.Spec.LocalInfos, string(pod.ObjectMeta.UID))
 				// This case is possible when some of the POD's are deleted marked in case of Deployment
 				localInfos[nodeName] = localInfo
-				refpolicy := false
-				if !forcedel {
+				if snatpolicy.GetDeletionTimestamp() == nil {
+					refpolicy := false
 					for _, local := range localInfo.Spec.LocalInfos {
 						if local.SnatPolicyName == snatpolicy.ObjectMeta.Name {
 							refpolicy = true
 						}
 					}
-				}
-				// if no reference to the policy found remove the snatIP
-				if !refpolicy {
-					snatIps[nodeName] = snatIp
+					// if no reference to the policy found remove the snatIP
+					if !refpolicy {
+						snatIps[nodeName] = snatIp
+					}
 				}
 			}
 		} else if pod.Status.Phase == corev1.PodRunning {
@@ -545,12 +544,6 @@ func (r *ReconcileSnatLocalInfo) snatPolicyUpdate(existingPods *corev1.PodList,
 			log.Info("Update Status as it is modified: ", "Snat Policy", snatpolicy.ObjectMeta.Name)
 			curpolicy.Status.SnatPortsAllocated = nil
 			update = true
-		} else if len(curpolicy.Spec.SnatIp) == 0 {
-			for _, snatIp := range snatIps {
-				// Service is bound to IP so delete the IP from Status
-				delete(curpolicy.Status.SnatPortsAllocated, snatIp)
-				update = true
-			}
 		} else {
 			// this case will be for deployment and ns delete
 			for nodeName, snatIp := range snatIps {
