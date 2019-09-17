@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"os"
+	"reflect"
 	"strings"
 
 	uuid "github.com/google/uuid"
@@ -237,6 +238,9 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 				} else {
 					_, portrange, _ =
 						utils.GetIPPortRangeForPod(r.client, instance.ObjectMeta.Name, &snatPolicy)
+				}
+				if reflect.DeepEqual(portrange, aciv1.PortRange{}) {
+					continue
 				}
 				log.Info("Update Global CR for getting PortsRage  #####", "Portrage:", portrange)
 				portlist := []aciv1.PortRange{}

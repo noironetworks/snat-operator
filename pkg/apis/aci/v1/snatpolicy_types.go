@@ -7,8 +7,9 @@ import (
 type PolicyState string
 
 const (
-	Ready  PolicyState = "Ready"
-	Failed PolicyState = "Failed"
+	Ready            PolicyState = "Ready"
+	Failed           PolicyState = "Failed"
+	IpPortsExhausted PolicyState = "IpPortsExhausted"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
