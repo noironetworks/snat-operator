@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -210,7 +211,7 @@ func GetIPPortRangeForPod(c client.Client, NodeName string,
 	for _, v := range snatIps {
 		if _, ok := snatPortsAllocated[v]; ok {
 			//  Check ports for this IP exhaused, then check for next IP
-			if len(snatPortsAllocated[v]) < len(expandedsnatports) {
+			if len(snatPortsAllocated[v]) <= len(expandedsnatports) {
 				for _, val := range snatPortsAllocated[v] {
 					if val.NodeName == NodeName {
 						return v, val.PortRange, true
@@ -227,6 +228,7 @@ func GetIPPortRangeForPod(c client.Client, NodeName string,
 					}
 				}
 			}
+			continue
 		}
 		return v, expandedsnatports[0], false
 	}
@@ -320,19 +322,25 @@ func CheckMatchesLabletoPolicy(c client.Client, labels map[string]string,
 func AllocateIpPortRange(c client.Client, portInuse map[string][]aciv1.NodePortRange,
 	podList *corev1.PodList, snatPolicy *aciv1.SnatPolicy) bool {
 	updated := false
-	emptyportrange := aciv1.PortRange{}
+	visited := make(map[string]bool)
 	for _, pod := range podList.Items {
 		if pod.Spec.HostNetwork {
 			continue
 		}
+		if visited[pod.Spec.NodeName] {
+			continue
+		}
 		snatip, portrange, exists := GetIPPortRangeForPod(c, pod.Spec.NodeName, snatPolicy)
-		if exists == false && pod.GetObjectMeta().GetDeletionTimestamp() == nil &&
-			portrange != emptyportrange {
+		if reflect.DeepEqual(portrange, aciv1.PortRange{}) {
+			return updated
+		}
+		if exists == false && pod.GetObjectMeta().GetDeletionTimestamp() == nil {
 			var nodePortRnage aciv1.NodePortRange
 			nodePortRnage.NodeName = pod.Spec.NodeName
 			nodePortRnage.PortRange = portrange
 			portInuse[snatip] = append(portInuse[snatip], nodePortRnage)
 			updated = true
+			visited[pod.Spec.NodeName] = true
 		}
 	}
 	return updated
@@ -342,14 +350,22 @@ func AllocateIpPortRange(c client.Client, portInuse map[string][]aciv1.NodePortR
 func AllocateIpPortRangeforservice(c client.Client, portInuse map[string][]aciv1.NodePortRange,
 	podList *corev1.PodList, snatPolicy *aciv1.SnatPolicy, snatip string) bool {
 	updated := false
+	visited := make(map[string]bool)
 	for _, pod := range podList.Items {
+		if visited[pod.Spec.NodeName] {
+			continue
+		}
 		portrange, exists := GetPortRangeForServiceIP(c, pod.Spec.NodeName, snatPolicy, snatip)
+		if reflect.DeepEqual(portrange, aciv1.PortRange{}) {
+			return updated
+		}
 		if exists == false && pod.GetObjectMeta().GetDeletionTimestamp() == nil {
 			var nodePortRnage aciv1.NodePortRange
 			nodePortRnage.NodeName = pod.Spec.NodeName
 			nodePortRnage.PortRange = portrange
 			portInuse[snatip] = append(portInuse[snatip], nodePortRnage)
 			updated = true
+			visited[pod.Spec.NodeName] = true
 		}
 	}
 	return updated

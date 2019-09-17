@@ -33,7 +33,7 @@ func (v *Validator) ValidateSnatIP(cr *aciv1.SnatPolicy, c client.Client) {
 	if len(snatPolicyList.Items) > 1 {
 		cr_labels := cr.Spec.Selector.Labels
 		for _, item := range snatPolicyList.Items {
-			if item.Status.State == aciv1.Ready {
+			if item.Status.State != aciv1.Failed {
 				if cr.ObjectMeta.Name != item.ObjectMeta.Name {
 
 					// check if IP is repeated or invalid

@@ -112,10 +112,12 @@ func (r *ReconcileSnatPolicy) Reconcile(request reconcile.Request) (reconcile.Re
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
-	instance.Status.State = aciv1.Ready
-	err = r.client.Status().Update(context.TODO(), instance)
-	if err != nil {
-		return reconcile.Result{}, err
+	if instance.Status.State != aciv1.IpPortsExhausted {
+		instance.Status.State = aciv1.Ready
+		err = r.client.Status().Update(context.TODO(), instance)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 	reqLogger.Info("Policy successfully applied")
 
