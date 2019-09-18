@@ -32,6 +32,7 @@ func (v *Validator) ValidateSnatIP(cr *aciv1.SnatPolicy, c client.Client) {
 
 	if len(snatPolicyList.Items) > 1 {
 		cr_labels := cr.Spec.Selector.Labels
+		cr_ns := cr.Spec.Selector.Namespace
 		for _, item := range snatPolicyList.Items {
 			if item.Status.State != aciv1.Failed {
 				if cr.ObjectMeta.Name != item.ObjectMeta.Name {
@@ -83,6 +84,14 @@ func (v *Validator) ValidateSnatIP(cr *aciv1.SnatPolicy, c client.Client) {
 								return
 							}
 						}
+					}
+
+					// if no labels, diff IP and
+					// same namespace- reject
+					item_ns := item.Spec.Selector.Namespace
+					if (len(item_labels) == 0) && (len(cr_labels) == 0) && (cr_ns == item_ns){
+						v.Validated = false
+						return
 					}
 				}
 			}
