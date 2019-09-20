@@ -119,7 +119,7 @@ func (r *ReconcileSnatPolicy) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 	}
-	reqLogger.Info("Policy successfully applied")
+	log.Info("Policy successfully applied", "SnatPolicy:", request.Name)
 
 	// Add finalizer for this CR
 	if !utils.Contains(instance.GetFinalizers(), snatPolicyFinalizer) {

@@ -26,7 +26,7 @@ func (v *Validator) ValidateSnatIP(cr *aciv1.SnatPolicy, c client.Client) {
 
 	if len(cr.Spec.Selector.Labels) > 1 {
 		v.Validated = false
-		UtilLog.Info("Invalid incoming Snatpolicy: cant have more than one label")
+		UtilLog.Info("Invalid incoming snatpolicy can't have more than one label")
 		return
 	}
 

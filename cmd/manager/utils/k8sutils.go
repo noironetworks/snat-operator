@@ -7,17 +7,17 @@ import (
 	"strconv"
 	"strings"
 
-	// nodeinfo "github.com/noironetworks/aci-containers/pkg/nodeinfo/apis/aci.nodeinfo/v1"
-
 	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
-	"github.com/prometheus/common/log"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
+
+var log = logf.Log.WithName("k8sutil")
 
 const (
 	MAX_PORT = 65000
@@ -41,7 +41,7 @@ func GetNodeInfoCRObject(c client.Client, nodeName string) (aciv1.NodeInfo, erro
 
 	for _, item := range nodeinfoList.Items {
 		if item.ObjectMeta.Name == nodeName {
-			UtilLog.Info("Nodeinfo object found", "For NodeName:", item)
+			UtilLog.Info("Nodeinfo object found for", "Nodename: ", item)
 			return item, nil
 		}
 	}
@@ -63,12 +63,11 @@ func GetLocalInfoCR(c client.Client, nodeName, namespace string) (aciv1.SnatLoca
 	foundLocalIfo := &aciv1.SnatLocalInfo{}
 	err := c.Get(context.TODO(), types.NamespacedName{Name: nodeName, Namespace: namespace}, foundLocalIfo)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("LocalInfo not present ", "foundLocalInfo:", nodeName)
+		log.V(1).Info("SnatLocalInfo not present", "NodeName: ", nodeName)
 		return aciv1.SnatLocalInfo{}, nil
 	} else if err != nil {
 		return aciv1.SnatLocalInfo{}, err
 	}
-
 	return *foundLocalIfo, nil
 }
 
@@ -78,7 +77,7 @@ func GetSnatPolicyCR(c client.Client, policyName string) (aciv1.SnatPolicy, erro
 	foundSnatPolicy := &aciv1.SnatPolicy{}
 	err := c.Get(context.TODO(), types.NamespacedName{Name: policyName, Namespace: os.Getenv("WATCH_NAMESPACE")}, foundSnatPolicy)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("SnatPolicy not present", "foundSnatPolicy:", policyName)
+		log.V(1).Info("SnatPolicy not present for", "NodeName: ", policyName)
 		return aciv1.SnatPolicy{}, err
 	} else if err != nil {
 		return aciv1.SnatPolicy{}, err
@@ -103,7 +102,7 @@ func CreateLocalInfoCR(c client.Client, localInfoSpec aciv1.SnatLocalInfoSpec,
 		log.Error(err, "failed to create a snat locainfo cr")
 		return obj, reconcile.Result{}, err
 	}
-	log.Info("Created localinfo object", "SnatLocalInfo", obj)
+	log.Info("Created localinfo object", "SnatLocalInfo: ", obj)
 	return obj, reconcile.Result{}, nil
 }
 
@@ -123,7 +122,7 @@ func DeleteLocalInfoCR(c client.Client, localInfoSpec aciv1.SnatLocalInfoSpec,
 		log.Error(err, "failed to Delete a snat locainfo cr")
 		return reconcile.Result{}, err
 	}
-	log.Info("Deleted localinfo object", "SnatLocalInfo", obj)
+	log.Info("Deleted localinfo object", "SnatLocalInfo: ", obj)
 	return reconcile.Result{}, nil
 }
 
@@ -135,7 +134,7 @@ func UpdateLocalInfoCR(c client.Client, localInfo aciv1.SnatLocalInfo) (reconcil
 		log.Error(err, "failed to update a snat locainfo cr")
 		return reconcile.Result{}, err
 	}
-	log.Info("Updated localinfo object", "SnatLocalInfo", localInfo)
+	log.Info("Updated localinfo object", "SnatLocalInfo: ", localInfo)
 	return reconcile.Result{}, nil
 }
 
@@ -153,7 +152,7 @@ func CreateSnatGlobalInfoCR(c client.Client, globalInfoSpec aciv1.SnatGlobalInfo
 		log.Error(err, "failed to create a snat global cr")
 		return reconcile.Result{}, err
 	}
-	log.Info("Created globalInfo object", "SnatGlobalInfo", obj)
+	log.Info("Created globalInfo object", "SnatGlobalInfo: ", obj)
 	return reconcile.Result{}, nil
 }
 
@@ -165,7 +164,7 @@ func UpdateGlobalInfoCR(c client.Client, globalInfo aciv1.SnatGlobalInfo) (recon
 		log.Error(err, "failed to update a snat globalInfo cr")
 		return reconcile.Result{}, err
 	}
-	log.Info("Updated globalInfo object", "SnatGlobalinfo", globalInfo)
+	log.Info("Updated globalInfo object", "SnatGlobalinfo: ", globalInfo)
 	return reconcile.Result{}, nil
 }
 
@@ -198,7 +197,6 @@ func getPortRangeFromConfigMap(c client.Client) (aciv1.PortRange, int) {
 // Get IP and port for pod for which notification has come to reconcile loop
 func GetIPPortRangeForPod(c client.Client, NodeName string,
 	snatpolicy *aciv1.SnatPolicy) (string, aciv1.PortRange, bool) {
-	log.Info("Get Port Range For", "Node name: ", NodeName)
 	snatPortsAllocated := snatpolicy.Status.SnatPortsAllocated
 	snatIps := ExpandCIDRs(snatpolicy.Spec.SnatIp)
 	portRange, portsPerNode := getPortRangeFromConfigMap(c)
@@ -214,6 +212,7 @@ func GetIPPortRangeForPod(c client.Client, NodeName string,
 			if len(snatPortsAllocated[v]) <= len(expandedsnatports) {
 				for _, val := range snatPortsAllocated[v] {
 					if val.NodeName == NodeName {
+						log.V(1).Info("Snat port range exists for", "NodeName: ", NodeName)
 						return v, val.PortRange, true
 					}
 				}
@@ -223,13 +222,14 @@ func GetIPPortRangeForPod(c client.Client, NodeName string,
 				}
 				for i, Val2 := range expandedsnatports {
 					if _, ok := m[Val2.Start]; !ok {
-						log.Info("Created New Port Range for new NodeName ", "SnatGlobalInfo", expandedsnatports[i])
+						log.V(1).Info("Created new snat port range for", "New nodename: ", NodeName)
 						return v, expandedsnatports[i], false
 					}
 				}
 			}
 			continue
 		}
+		log.V(1).Info("Created new snat port range for", "New nodename: ", NodeName)
 		return v, expandedsnatports[0], false
 	}
 	return "", aciv1.PortRange{}, false
@@ -246,6 +246,7 @@ func UpdateSnatPolicyStatus(NodeName string, snatpolicy *aciv1.SnatPolicy,
 				nodePortRange = nodePortRange[:len(nodePortRange)-1]
 				snatpolicy.Status.SnatPortsAllocated[snatIp] = nodePortRange
 				if len(nodePortRange) == 0 {
+					log.Info("Snat ip deleted from status", "SnatIp: ", snatIp)
 					delete(snatpolicy.Status.SnatPortsAllocated, snatIp)
 				}
 				return true
@@ -271,16 +272,18 @@ func GetPortRangeForServiceIP(c client.Client, NodeName string,
 		}
 		for _, val := range nodePortRange {
 			if val.NodeName == NodeName {
+				log.V(1).Info("Snat port range exists for", "Service ip: ", "NodeName: ", snatIp, NodeName)
 				return val.PortRange, true
 			}
 		}
 		m := map[int]int{}
 		for _, Val1 := range snatPortsAllocated[snatIp] {
+
 			m[Val1.PortRange.Start] = Val1.PortRange.End
 		}
 		for i, Val2 := range expandedsnatports {
 			if _, ok := m[Val2.Start]; !ok {
-				log.Info("Created New Port Range for new NodeName ", "SnatGlobalInfo", expandedsnatports[i])
+				log.V(1).Info("Created new snat port range for", "Service ip: ", "New nodename: ", snatIp, NodeName)
 				return expandedsnatports[i], false
 			}
 		}
@@ -303,7 +306,7 @@ func CheckMatchesLabletoPolicy(c client.Client, labels map[string]string,
 			continue
 		}
 		if MatchLabels(item.Spec.Selector.Labels, labels) {
-			log.Info("Matches", "Labels ", item.Spec.Selector.Labels)
+			log.Info("Matches", "Labels: ", item.Spec.Selector.Labels)
 			if item.Spec.Selector.Namespace != "" && item.Spec.Selector.Namespace == namespace {
 				matches = true
 				snatPolicyName = item.ObjectMeta.Name

@@ -22,13 +22,13 @@ type handleLocalInfosMapper struct {
 // Request will be of this format
 // Name: "snat-localinfo-" + <locainfo CR name>
 func (h *handleLocalInfosMapper) Map(obj handler.MapObject) []reconcile.Request {
-	MapperLog.Info("Local Info Obj", "mapper handling first ###", obj.Object)
+	MapperLog.V(1).Info("Mapper handling the object", "SnatLocalInfo: ", obj.Object)
 	if obj.Object == nil {
 		return nil
 	}
 
 	localInfo, ok := obj.Object.(*aciv1.SnatLocalInfo)
-	MapperLog.Info("Local Info Obj", "mapper handling ###", localInfo)
+	MapperLog.V(1).Info("Mapper handling the object", "SnatLocalInfo: ", localInfo)
 	if !ok {
 		return nil
 	}

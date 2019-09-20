@@ -21,7 +21,7 @@ func (a StartSorter) Less(i, j int) bool { return a[i].Start < a[j].Start }
 // return sorted array(based on start of the range) of portranges based on number of per node
 func ExpandPortRanges(currPortRange []aciv1.PortRange, step int) []aciv1.PortRange {
 
-	UtilLog.Info("Inside ExpandPortRanges", "currPortRange:", currPortRange, "Step:", step)
+	UtilLog.V(1).Info("Inside ExpandPortRanges", "currPortRange: ", currPortRange, "step: ", step)
 	expandedPortRange := []aciv1.PortRange{}
 	for _, item := range currPortRange {
 		temp := item.Start

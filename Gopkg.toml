@@ -64,6 +64,10 @@ required = [
   name = "github.com/openshift/api"
   branch = "master"
 
+[[constraint]]
+  name = "github.com/evanphx/json-patch"
+  version = "master"
+
 [prune]
   go-tests = true
   non-go = true
