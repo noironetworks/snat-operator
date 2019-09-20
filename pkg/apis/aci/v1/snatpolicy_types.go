@@ -23,8 +23,6 @@ type SnatPolicySpec struct {
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
 	SnatIp   []string    `json:"snatIp"`
 	Selector PodSelector `json:"selector,omitempty"`
-	// +kubebuilder:validation:Enum=tcp,udp,icmp
-	Protocols []string `json:"protocols,omitempty"`
 }
 
 // SnatPolicyStatus defines the observed state of SnatPolicy

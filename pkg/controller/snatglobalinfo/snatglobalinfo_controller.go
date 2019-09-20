@@ -178,7 +178,6 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 					PortRanges: portlist,
 					SnatIp:     snatIp,
 					SnatIpUid:  snatIpUuid.String(),
-					Protocols:  []string{"tcp", "udp", "icmp"},
 				}
 
 				globalInfos = append(globalInfos, temp)
@@ -252,7 +251,6 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 					PortRanges: portlist,
 					SnatIp:     snatIp,
 					SnatIpUid:  snatIpUuid.String(),
-					Protocols:  []string{"tcp", "udp", "icmp"},
 				}
 				globalInfos = append(globalInfos, temp)
 				update = true
