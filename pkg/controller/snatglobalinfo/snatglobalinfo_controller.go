@@ -110,7 +110,7 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 			isSnatLocalInfoDeleted := instance.GetDeletionTimestamp() != nil
 			if isSnatLocalInfoDeleted {
 				//delete(globalInfo.Spec.GlobalInfos, instance.ObjectMeta.Name)
-				log.Info("Deleted LOCAL CR for Node: ", "Updating the GlobalInfo: ", instance.ObjectMeta.Name)
+				log.V(1).Info("After deleting snatlocalinfo CR, updating", "SnatGlobalInfo: ", instance.ObjectMeta.Name)
 				//return utils.UpdateGlobalInfoCR(r.client, *globalInfo)
 			}
 			return reconcile.Result{}, nil
@@ -120,9 +120,7 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 	}
 	isSnatLocalInfoDeleted := instance.GetDeletionTimestamp() != nil
 	if isSnatLocalInfoDeleted {
-		//delete(globalInfo.Spec.GlobalInfos, instance.ObjectMeta.Name)
-		log.Info("Deleted LOCAL CR2 for Node #####", "Updating the GlobalInfo", instance.ObjectMeta.Name)
-		//return utils.UpdateGlobalInfoCR(r.client, *globalInfo)
+		log.V(1).Info("After deleting snatlocalinfo CR, updating", "SnatGlobalInfo: ", instance.ObjectMeta.Name)
 	}
 
 	// Create  get the local ip -> Snat Policy refrences
@@ -184,7 +182,7 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 			}
 			tempMap := make(map[string][]aciv1.GlobalInfo)
 			tempMap[instance.ObjectMeta.Name] = globalInfos
-			log.Info("Global CR is not present", "Creating new one", tempMap)
+			log.Info("Global CR is not present creating new one", "SnatGlobalInfo: ", tempMap)
 			spec := aciv1.SnatGlobalInfoSpec{
 				GlobalInfos: tempMap,
 			}
@@ -203,7 +201,7 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 		for i := 0; i < ginfolen; i++ {
 			j := i - deletedcount
 			if len(localips[globalInfos[j].SnatIp]) == 0 {
-				log.Info("Update Global info CR for Deleted LOCAL CR #####", "Info Obj deleted", globalInfos[j])
+				log.V(1).Info("After deleting snatlocalInfo, updating snatglobalinfo", "SnatGlobalInfo: ", globalInfos[j])
 				globalInfos = append(globalInfos[:j], globalInfos[j+1:]...)
 				update = true
 				deletedcount++
@@ -241,7 +239,7 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 				if reflect.DeepEqual(portrange, aciv1.PortRange{}) {
 					continue
 				}
-				log.Info("Update Global CR for getting PortsRage  #####", "Portrage:", portrange)
+				log.V(1).Info("Update global CR with portrage", "PortRange: ", portrange)
 				portlist := []aciv1.PortRange{}
 				portlist = append(portlist, portrange)
 				ip := net.ParseIP(snatIp)
@@ -258,7 +256,7 @@ func (r *ReconcileSnatGlobalInfo) handleLocalinfoEvent(name string) (reconcile.R
 		}
 
 		if update {
-			log.Info("Update for LOCAL CR is Received", "calling Global CR Update", globalInfo)
+			log.V(1).Info("Snat localinfo CR received update global Info: ", "SnatGlobalInfo: ", globalInfo)
 			if len(globalInfos) == 0 {
 				delete(globalInfo.Spec.GlobalInfos, instance.ObjectMeta.Name)
 			} else {
