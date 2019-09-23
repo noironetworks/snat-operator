@@ -32,7 +32,7 @@ func GetIPsFromCIDR(cidr string) []string {
 			cidr = cidr + "/128"
 			ip, ipnet, _ = net.ParseCIDR(cidr)
 		} else {
-			UtilLog.Error(err, "Invalid CIDR, skipping this one: " + cidr)
+			UtilLog.Error(err, "Invalid CIDR, skipping this one: "+cidr)
 			return output
 		}
 	}
@@ -68,7 +68,7 @@ func ExpandCIDRs(currCIDRs []string) []string {
 
 	// Sort list of IPs
 	expandedIPs = sortIps(expandedIPs)
-	UtilLog.Info("Inside ExpandCIDRs", "currCIDRs:", expandedIPs)
+	UtilLog.V(1).Info("Inside ExpandCIDRs", "CurrCIDRs:", expandedIPs)
 
 	return expandedIPs
 }
