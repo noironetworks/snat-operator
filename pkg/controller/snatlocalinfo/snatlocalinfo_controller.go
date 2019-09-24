@@ -333,7 +333,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyEvent(request reconcile.Request
 		},
 		existingPods)
 	if err != nil {
-		log.Error(err, "Failed to list pods for namespace: ", snatPolicy.Spec.Selector.Namespace)
+		log.Error(err, "Failed to list pods", "Namespace: ", snatPolicy.Spec.Selector.Namespace)
 		return reconcile.Result{}, err
 	}
 	//  list all the deployments
@@ -345,7 +345,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyEvent(request reconcile.Request
 		},
 		deploymentList)
 	if err != nil {
-		log.Error(err, "Failed to list deployments for namespace: ", snatPolicy.Spec.Selector.Namespace)
+		log.Error(err, "Failed to list deployments for", "Namespace: ", snatPolicy.Spec.Selector.Namespace)
 	}
 	depPods := []corev1.PodList{}
 	for _, dep := range deploymentList.Items {
@@ -706,7 +706,7 @@ func (r *ReconcileSnatLocalInfo) handleDeploymentEvent(request reconcile.Request
 		},
 		Pods)
 	if err != nil {
-		log.Error(err, "Failed to list pods for namespace: ", namespace)
+		log.Error(err, "Failed to list pods for", "Namespace: ", namespace)
 		return reconcile.Result{}, err
 	}
 	_, err = r.updatePods(Pods, matches, snatPolicyName, DEPLOYMENT, deploymentdeleted)
@@ -757,7 +757,7 @@ func (r *ReconcileSnatLocalInfo) handleNameSpaceEvent(request reconcile.Request)
 		},
 		Pods)
 	if err != nil {
-		log.Error(err, "Failed to list pods for namespace: ", namespaceName)
+		log.Error(err, "Failed to list pods for", "Namespace: ", namespaceName)
 		return reconcile.Result{}, err
 	}
 	_, err = r.updatePods(Pods, matches, snatPolicyName, NAMESPACE, namespacedeleted)
@@ -869,7 +869,7 @@ func (r *ReconcileSnatLocalInfo) updatePods(Pods *corev1.PodList, matches bool, 
 			log.V(1).Info("Found pod", "Matches policy name: ", snatPolicy.ObjectMeta.Name)
 			_, err1 := r.snatPolicyUpdate(Pods, &snatPolicy, resType, true, "", resdeleted)
 			if err1 != nil {
-				log.Error(err, "SnatPolicy update failed: ", snatPolicy.ObjectMeta.Name)
+				log.Error(err, "SnatPolicy update failed", "SnatPolicy: ", snatPolicy.ObjectMeta.Name)
 				return reconcile.Result{}, err
 			}
 		}
@@ -946,7 +946,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForServices(snatPolicy *aciv1.S
 			}
 			_, err := r.snatPolicyUpdate(Pods, snatPolicy, resType, isSnatPolicyDeleted, snatip, false)
 			if err != nil {
-				log.Error(err, "SnatPolicy update failed: ", snatPolicy.ObjectMeta.Name)
+				log.Error(err, "SnatPolicy update failed", "SnatPolicy: ", snatPolicy.ObjectMeta.Name)
 				return reconcile.Result{}, err
 			}
 		}
@@ -1062,7 +1062,7 @@ func (r *ReconcileSnatLocalInfo) handleServiceEvent(request reconcile.Request) (
 		}
 		_, err = r.snatPolicyUpdate(Pods, &snatPolicy, resType, false, snatip, false)
 		if err != nil {
-			log.Error(err, "SnatPolicy update failed: ", snatPolicy.ObjectMeta.Name)
+			log.Error(err, "SnatPolicy update failed", "SnatPolicy: ", snatPolicy.ObjectMeta.Name)
 			return reconcile.Result{}, err
 		}
 
@@ -1089,7 +1089,7 @@ func (r *ReconcileSnatLocalInfo) handleServiceEvent(request reconcile.Request) (
 				_, err = r.snatPolicyUpdate(Pods, &snatPolicy, resType, true, snatip, false)
 			}
 			if err != nil {
-				log.Error(err, "SnatPolicy update failed: ", snatPolicy.ObjectMeta.Name)
+				log.Error(err, "SnatPolicy update failed", "SnatPolicy: ", snatPolicy.ObjectMeta.Name)
 				return reconcile.Result{}, err
 			}
 		}
@@ -1132,7 +1132,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForCluster(snatPolicy *aciv1.Sn
 	log.Info("SnatPolicy applied at Cluster for", "SnatPolicyName: ", snatPolicy.ObjectMeta.Name)
 	_, err = r.snatPolicyUpdate(Pods, snatPolicy, CLUSTER, isSnatPolicyDeleted, "", false)
 	if err != nil {
-		log.Error(err, "SnatPolicy update failed: ", snatPolicy.ObjectMeta.Name)
+		log.Error(err, "SnatPolicy update failed", "SnatPolicy: ", snatPolicy.ObjectMeta.Name)
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
@@ -1152,7 +1152,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForNameSpace(snatPolicy *aciv1.
 		},
 		nameSpacePods)
 	if err != nil {
-		log.Error(err, "Failed to list pods for namespace: ", snatPolicy.Spec.Selector.Namespace)
+		log.Error(err, "Failed to list pods for", "Namespace: ", snatPolicy.Spec.Selector.Namespace)
 		return reconcile.Result{}, nil
 	}
 	snatIps := utils.ExpandCIDRs(snatPolicy.Spec.SnatIp)
@@ -1179,7 +1179,7 @@ func (r *ReconcileSnatLocalInfo) handleSnatPolicyForNameSpace(snatPolicy *aciv1.
 	if len(nameSpacePods.Items) != 0 {
 		_, err = r.snatPolicyUpdate(nameSpacePods, snatPolicy, NAMESPACE, isSnatPolicyDeleted, "", false)
 		if err != nil {
-			log.Error(err, "SnatPolicy update failed: ", snatPolicy.ObjectMeta.Name)
+			log.Error(err, "SnatPolicy update failed", "SnatPolicy: ", snatPolicy.ObjectMeta.Name)
 			return reconcile.Result{}, err
 		}
 	}
