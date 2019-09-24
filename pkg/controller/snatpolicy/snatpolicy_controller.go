@@ -3,6 +3,7 @@ package snatpolicy
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/noironetworks/snat-operator/cmd/manager/utils"
@@ -149,6 +150,10 @@ func (r *ReconcileSnatPolicy) addFinalizer(m *aciv1.SnatPolicy) error {
 // Cleanup steps to be done when snatPolicy resource is getting deleted.
 func (r *ReconcileSnatPolicy) finalizeSnatPolicy(reqLogger logr.Logger, m *aciv1.SnatPolicy) error {
 	if len(m.Status.SnatPortsAllocated) != 0 {
+		//Finlizer will wait untill the snatlocalinfo controller deletes the policy related info.
+		// If it is still not deleted finalizer will check for snatpolicy refrence and deletes it after 2 secs.
+		// Error condtion it retries every 2 sec.
+		time.Sleep(time.Second * 2)
 		for _, portslist := range m.Status.SnatPortsAllocated {
 			for _, nodeinfo := range portslist {
 				localInfo, _ := utils.GetLocalInfoCR(r.client, nodeinfo.NodeName, os.Getenv("ACI_SNAT_NAMESPACE"))
