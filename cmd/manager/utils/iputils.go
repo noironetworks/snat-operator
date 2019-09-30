@@ -16,25 +16,34 @@ func inc(ip net.IP) {
 	}
 }
 
-// Given CIDR, this function returns list of IP addresses in that CIDR
-// It does omit network and host reserved IP address from that.
-func GetIPsFromCIDR(cidr string) []string {
-
-	var output []string
-
+func parseIP(cidr string) (net.IP, *net.IPNet, error){
 	ip, ipnet, err := net.ParseCIDR(cidr)
 	if err != nil {
 		ip_temp := net.ParseIP(cidr)
 		if ip_temp != nil && ip_temp.To4() != nil {
 			cidr = cidr + "/32"
-			ip, ipnet, _ = net.ParseCIDR(cidr)
+                        ip, ipnet, _ = net.ParseCIDR(cidr)
+			return ip, ipnet, nil
 		} else if ip_temp != nil && ip_temp.To16() != nil {
-			cidr = cidr + "/128"
-			ip, ipnet, _ = net.ParseCIDR(cidr)
+                        cidr = cidr + "/128"
+                        ip, ipnet, _ = net.ParseCIDR(cidr)
+			return ip, ipnet, nil
 		} else {
-			UtilLog.Error(err, "Invalid CIDR, skipping this one: "+cidr)
-			return output
-		}
+                        return nil, nil, err
+                }
+	}
+	return ip, ipnet, err
+}
+
+// Given CIDR, this function returns list of IP addresses in that CIDR
+// It does omit network and host reserved IP address from that.
+func GetIPsFromCIDR(cidr string) []string {
+
+	var output []string
+	ip, ipnet, err := parseIP(cidr)
+	if err != nil {
+		UtilLog.Error(err, "Invalid CIDR, skipping this one: "+cidr)
+		return output
 	}
 
 	for ip := ip.Mask(ipnet.Mask); ipnet.Contains(ip); inc(ip) {
