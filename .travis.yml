@@ -1,9 +1,8 @@
 matrix:
   include:
     - language: go
-     go:
+      go:
         - 1.12.6
-    sudo: required
       install:
         - curl -LO https://github.com/operator-framework/operator-sdk/releases/download/v0.8.1/operator-sdk-v0.8.1-x86_64-linux-gnu
         - chmod +x operator-sdk-v0.8.1-x86_64-linux-gnu && sudo mkdir -p /usr/local/bin/ && sudo cp operator-sdk-v0.8.1-x86_64-linux-gnu /usr/local/bin/operator-sdk && rm operator-sdk-v0.8.1-x86_64-linux-gnu
@@ -14,7 +13,7 @@ matrix:
        - ACI_SNAT_NAMESPACE=default
        - ACI_SNAGLOBALINFO_NAME=snatglobalinfo
       script:
-        - go test -cover github.com/noironetworks/snat-operator/pkg/controller/snatPolicy
+        - go test -cover github.com/noironetworks/snat-operator/pkg/controller/snatpolicy
         - go test -cover github.com/noironetworks/snat-operator/pkg/controller/snatlocalinfo
         - go test -cover github.com/noironetworks/snat-operator/pkg/controller/snatglobalinfo
 
