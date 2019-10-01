@@ -16,7 +16,7 @@ spec:
       containers:
         - name: snat-operator
           # Replace this with the built image name
-          image: gauravdalvi/snat-operator:v0.0.2
+          image: jayaramksv/snat-operator:sep-24
           command:
           - snat-operator
           imagePullPolicy: Always
