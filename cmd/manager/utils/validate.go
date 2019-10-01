@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"net"
 
 	aciv1 "github.com/noironetworks/snat-operator/pkg/apis/aci/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,35 +35,14 @@ func (v *Validator) ValidateSnatIP(cr *aciv1.SnatPolicy, c client.Client) {
 		for _, item := range snatPolicyList.Items {
 			if item.Status.State != aciv1.Failed {
 				if cr.ObjectMeta.Name != item.ObjectMeta.Name {
-
-					// check if IP is repeated or invalid
 					for _, val := range item.Spec.SnatIp {
-						_, net1, err1 := net.ParseCIDR(val)
-						if err1 != nil {
-							ip_temp1 := net.ParseIP(val)
-							if ip_temp1.To4() != nil {
-								val = val + "/32"
-								_, net1, _ = net.ParseCIDR(val)
-							} else {
-								val = val + "/128"
-								_, net1, _ = net.ParseCIDR(val)
-							}
-						}
+						_, net1, _ := parseIP(val)
 						for _, ip := range cr.Spec.SnatIp {
-							_, net2, err := net.ParseCIDR(ip)
+							_, net2, err := parseIP(ip)
 							if err != nil {
-								ip_temp := net.ParseIP(ip)
-								if ip_temp != nil && ip_temp.To4() != nil {
-									ip = ip + "/32"
-									_, net2, _ = net.ParseCIDR(ip)
-								} else if ip_temp != nil && ip_temp.To16() != nil {
-									ip = ip + "/128"
-									_, net2, _ = net.ParseCIDR(ip)
-								} else {
-									UtilLog.Error(err, "Invalid incoming Snatpolicy")
-									v.Validated = false
-									return
-								}
+								UtilLog.Error(err, "Invalid incoming Snatpolicy")
+								v.Validated = false
+								return
 							}
 							if net2.Contains(net1.IP) || net1.Contains(net2.IP) {
 								UtilLog.Error(err, "SnatIP's are conflicting across the policies")
@@ -98,18 +76,11 @@ func (v *Validator) ValidateSnatIP(cr *aciv1.SnatPolicy, c client.Client) {
 		}
 	} else {
 		for _, ip := range cr.Spec.SnatIp {
-			_, _, err := net.ParseCIDR(ip)
+			_, _, err := parseIP(ip)
 			if err != nil {
-				ip_temp := net.ParseIP(ip)
-				if ip_temp != nil && ip_temp.To4() != nil {
-					ip = ip + "/32"
-				} else if ip_temp != nil && ip_temp.To16() != nil {
-					ip = ip + "/128"
-				} else {
-					v.Validated = false
-					UtilLog.Error(err, "Invalid incoming Snatpolicy")
-					return
-				}
+				UtilLog.Error(err, "Invalid incoming Snatpolicy")
+				v.Validated = false
+				return
 			}
 		}
 	}
