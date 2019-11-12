@@ -14,7 +14,6 @@ import (
 	"github.com/noironetworks/snat-operator/pkg/controller"
 
 	openv1 "github.com/openshift/api/apps/v1"
-	"github.com/operator-framework/operator-sdk/pkg/leader"
 	"github.com/operator-framework/operator-sdk/pkg/log/zap"
 	"github.com/operator-framework/operator-sdk/pkg/metrics"
 	"github.com/operator-framework/operator-sdk/pkg/restmapper"
@@ -75,18 +74,14 @@ func main() {
 
 	ctx := context.TODO()
 
-	// Become the leader before proceeding
-	err = leader.Become(ctx, "snat-operator-lock")
-	if err != nil {
-		log.Error(err, "")
-		os.Exit(1)
-	}
-
 	// Create a new Cmd to provide shared dependencies and start components
 	mgr, err := manager.New(cfg, manager.Options{
-		Namespace:          "",
-		MapperProvider:     restmapper.NewDynamicRESTMapper,
-		MetricsBindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
+		Namespace:               "",
+		MapperProvider:          restmapper.NewDynamicRESTMapper,
+		MetricsBindAddress:      fmt.Sprintf("%s:%d", metricsHost, metricsPort),
+		LeaderElectionNamespace: "",
+		LeaderElection:          true,
+		LeaderElectionID:        "snat-operator-lock",
 	})
 	if err != nil {
 		log.Error(err, "")
