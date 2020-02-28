@@ -1,17 +1,18 @@
 matrix:
   include:
     - language: go
-      sudo: false
-      go: "1.10"
+      go:
+        - 1.12.6
       install:
+        - curl -LO https://github.com/operator-framework/operator-sdk/releases/download/v0.8.1/operator-sdk-v0.8.1-x86_64-linux-gnu
+        - chmod +x operator-sdk-v0.8.1-x86_64-linux-gnu && sudo mkdir -p /usr/local/bin/ && sudo cp operator-sdk-v0.8.1-x86_64-linux-gnu /usr/local/bin/operator-sdk && rm operator-sdk-v0.8.1-x86_64-linux-gnu
         - go get -v -u github.com/golang/dep/cmd/dep
-        - export PATH=$PATH:$GOPATH/bin
-        - make vendor
-        - export ACI_SNAT_NAMESPACE=default
-        - export ACI_SNAGLOBALINFO_NAME=snatglobalinfo
+        - PATH=$PATH:$GOPATH/bin
+        - dep ensure -v
+      env:
+       - ACI_SNAT_NAMESPACE=default
+       - ACI_SNAGLOBALINFO_NAME=snatglobalinfo
       script:
-        - make goinstall
-        - go test -cover github.com/noironetworks/snat-operator/pkg/controller/snatPolicy
+        - go test -cover github.com/noironetworks/snat-operator/pkg/controller/snatpolicy
         - go test -cover github.com/noironetworks/snat-operator/pkg/controller/snatlocalinfo
         - go test -cover github.com/noironetworks/snat-operator/pkg/controller/snatglobalinfo
-
