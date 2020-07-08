@@ -248,7 +248,7 @@ func (r *ReconcileSnatLocalInfo) handlePodEvent(request reconcile.Request) (reco
 			}
 		}
 	}
-	if foundPod.Status.Phase == "Running" {
+	if foundPod.Status.Phase != corev1.PodFailed {
 		portinuse := make(map[string][]aciv1.NodePortRange)
 		if len(snatPolicy.Status.SnatPortsAllocated) != 0 {
 			portinuse = snatPolicy.Status.SnatPortsAllocated
@@ -538,7 +538,7 @@ func (r *ReconcileSnatLocalInfo) snatPolicyUpdate(existingPods *corev1.PodList,
 					}
 				}
 			}
-		} else if pod.Status.Phase == corev1.PodRunning {
+		} else if pod.Status.Phase != corev1.PodFailed {
 			_, updated, err1 := r.addLocalInfo(&localInfo, &pod, snatpolicy, resType, snatip)
 			if err1 != nil {
 				log.Error(err, "Adding localInfo error")
