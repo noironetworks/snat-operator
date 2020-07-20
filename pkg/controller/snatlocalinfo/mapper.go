@@ -393,6 +393,16 @@ Loop:
 	return newrequests
 }
 
+func ChecklabelsMatches(client client.Client, oldlabels map[string]string,
+	curlabels map[string]string, namespace string) bool {
+	_, old := utils.CheckMatchesLabletoPolicy(client, oldlabels, namespace)
+	_, cur := utils.CheckMatchesLabletoPolicy(client, curlabels, namespace)
+	if !old && !cur {
+		return false
+	}
+	return true
+}
+
 func HandleDeploymentForDeploymentMapper(client client.Client, predicates []predicate.Predicate) handler.Mapper {
 	return &handleDeployment{client, predicates}
 }
@@ -421,7 +431,12 @@ func (h *handleDeployment) Map(obj handler.MapObject) []reconcile.Request {
 	err := h.client.Get(context.TODO(), types.NamespacedName{Namespace: deployment.ObjectMeta.Namespace,
 		Name: deployment.ObjectMeta.Name}, curdep)
 	if err == nil && curdep.GetDeletionTimestamp() == nil {
-		slectorString, err = json.Marshal(deployment.ObjectMeta.Labels)
+		// if old and new labels don't match return
+		if !ChecklabelsMatches(h.client, deployment.ObjectMeta.Labels,
+			curdep.ObjectMeta.Labels, deployment.ObjectMeta.Namespace) {
+			return nil
+		}
+		slectorString, err = json.Marshal(curdep.ObjectMeta.Labels)
 	} else {
 		slectorString, err = json.Marshal(deployment.Spec.Selector.MatchLabels)
 	}
@@ -453,8 +468,13 @@ func (h *handleDeploymentConfig) Map(obj handler.MapObject) []reconcile.Request 
 	err := h.client.Get(context.TODO(), types.NamespacedName{Namespace: deployment.ObjectMeta.Namespace,
 		Name: deployment.ObjectMeta.Name}, curdep)
 	if err == nil && curdep.GetDeletionTimestamp() == nil {
+		// if old and new labels don't match return
+		if !ChecklabelsMatches(h.client, deployment.ObjectMeta.Labels,
+			curdep.ObjectMeta.Labels, deployment.ObjectMeta.Namespace) {
+			return nil
+		}
 		// otherwise set the updated label
-		slectorString, err = json.Marshal(deployment.ObjectMeta.Labels)
+		slectorString, err = json.Marshal(curdep.ObjectMeta.Labels)
 	} else {
 		//set the selector in case of delete of deployment
 		slectorString, err = json.Marshal(deployment.Spec.Selector)
@@ -486,7 +506,12 @@ func (h *handleNamespace) Map(obj handler.MapObject) []reconcile.Request {
 	}
 	err := h.client.Get(context.TODO(), types.NamespacedName{Name: namespace.ObjectMeta.Name}, curnamespace)
 	if err == nil && curnamespace.GetDeletionTimestamp() == nil {
-		slectorString, err = json.Marshal(namespace.ObjectMeta.Labels)
+		// if old and new labels don't match return
+		if !ChecklabelsMatches(h.client, namespace.ObjectMeta.Labels,
+			curnamespace.ObjectMeta.Labels, namespace.ObjectMeta.Name) {
+			return nil
+		}
+		slectorString, err = json.Marshal(curnamespace.ObjectMeta.Labels)
 		if err != nil {
 			MapperLog.Error(err, "Failed to marshal slectorString")
 			return nil
